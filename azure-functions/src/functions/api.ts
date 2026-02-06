@@ -144,11 +144,10 @@ async function getHourlyOccupancy(request: HttpRequest, context: InvocationConte
 async function getOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const result = await pool.query(`
-      SELECT o.*, co.current_occupancy, co.occupancy_rate
-      FROM offices o
-      LEFT JOIN current_occupancy co ON o.id = co.office_id
-      WHERE o.is_active = true
-      ORDER BY o.name
+      SELECT id, name, location, capacity, timezone, is_active
+      FROM offices
+      WHERE is_active = true
+      ORDER BY name
     `);
 
     return { status: 200, headers: corsHeaders, jsonBody: result.rows };
@@ -264,10 +263,9 @@ async function getUserById(request: HttpRequest, context: InvocationContext): Pr
       return { status: 400, headers: corsHeaders, jsonBody: { error: 'User ID required' } };
     }
 
+    // Use only columns that exist in the original schema
     const result = await pool.query(`
-      SELECT id, entra_id, email, display_name, department, job_title, 
-             office_location, manager_name, manager_email, employee_type,
-             account_enabled, created_at
+      SELECT id, entra_id, email, display_name, department, job_title, created_at
       FROM users WHERE id = $1
     `, [userId]);
 

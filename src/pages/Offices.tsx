@@ -1,41 +1,47 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Users, Clock, TrendingUp } from 'lucide-react';
-import { mockOffices, generateDailyAttendance, getOfficeComparisonData } from '@/utils/mockData';
+import { MapPin, Users, Clock, TrendingUp, Loader2 } from 'lucide-react';
+
+interface Office {
+  id: string;
+  name: string;
+  location: string;
+  capacity: number;
+  timezone: string;
+  is_active: boolean;
+}
+
+const API_BASE = 'https://improving-pulse-functions.azurewebsites.net/api';
 
 export function Offices() {
   const navigate = useNavigate();
-  const dailyAttendance = useMemo(() => generateDailyAttendance(30), []);
-  const officeComparison = useMemo(() => getOfficeComparisonData(), []);
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const officeStats = useMemo(() => {
-    return mockOffices.map((office) => {
-      const officeData = dailyAttendance.filter((d) => d.officeId === office.id);
-      const totalVisitors = officeData.reduce((sum, d) => sum + d.uniqueVisitors, 0);
-      const avgDaily = Math.round(totalVisitors / 30);
-      const avgDuration = Math.round(
-        officeData.reduce((sum, d) => sum + d.averageDurationMinutes, 0) / officeData.length
-      );
-      const peakOccupancy = Math.max(...officeData.map((d) => d.peakOccupancy));
-      const comparison = officeComparison.find((c) => c.name === office.name);
+  useEffect(() => {
+    async function fetchOffices() {
+      try {
+        const response = await fetch(`${API_BASE}/offices`);
+        if (response.ok) {
+          const data = await response.json();
+          setOffices(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch offices:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchOffices();
+  }, []);
 
-      return {
-        ...office,
-        totalVisitors,
-        avgDaily,
-        avgDuration,
-        peakOccupancy,
-        currentOccupancy: comparison?.current || 0,
-        occupancyRate: comparison?.occupancyRate || 0,
-      };
-    });
-  }, [dailyAttendance, officeComparison]);
-
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-[#005596]" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -47,14 +53,14 @@ export function Offices() {
 
       {/* Office Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {officeStats.map((office) => (
+        {offices.map((office) => (
           <div
             key={office.id}
             className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
             onClick={() => navigate(`/offices/${office.id}`)}
           >
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+            <div className="bg-gradient-to-r from-[#005596] to-[#4597D3] p-6 text-white">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-xl font-bold">{office.name}</h3>
@@ -64,8 +70,8 @@ export function Offices() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold">{office.occupancyRate}%</p>
-                  <p className="text-sm text-blue-100">utilization</p>
+                  <p className="text-3xl font-bold">{office.capacity}</p>
+                  <p className="text-sm text-blue-100">capacity</p>
                 </div>
               </div>
             </div>
@@ -75,84 +81,45 @@ export function Offices() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-50 rounded-lg">
-                    <Users className="w-5 h-5 text-blue-600" />
+                    <Users className="w-5 h-5 text-[#005596]" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Current</p>
+                    <p className="text-xs text-slate-500">Capacity</p>
                     <p className="text-lg font-semibold text-slate-900">
-                      {office.currentOccupancy}/{office.capacity}
+                      {office.capacity}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-50 rounded-lg">
-                    <TrendingUp className="w-5 h-5 text-green-600" />
+                    <TrendingUp className="w-5 h-5 text-[#5BC2A7]" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Daily Avg</p>
-                    <p className="text-lg font-semibold text-slate-900">{office.avgDaily}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-50 rounded-lg">
-                    <Clock className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Avg Stay</p>
+                    <p className="text-xs text-slate-500">Status</p>
                     <p className="text-lg font-semibold text-slate-900">
-                      {formatDuration(office.avgDuration)}
+                      {office.is_active ? 'Active' : 'Inactive'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-orange-50 rounded-lg">
-                    <Users className="w-5 h-5 text-orange-600" />
+                <div className="flex items-center gap-3 col-span-2">
+                  <div className="p-2 bg-purple-50 rounded-lg">
+                    <Clock className="w-5 h-5 text-[#9D1D96]" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Peak</p>
-                    <p className="text-lg font-semibold text-slate-900">{office.peakOccupancy}</p>
+                    <p className="text-xs text-slate-500">Timezone</p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {office.timezone}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Capacity bar */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-slate-500">Capacity utilization</span>
-                  <span className="font-medium text-slate-700">
-                    {office.currentOccupancy} of {office.capacity}
-                  </span>
-                </div>
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      office.occupancyRate > 80
-                        ? 'bg-red-500'
-                        : office.occupancyRate > 60
-                        ? 'bg-yellow-500'
-                        : 'bg-green-500'
-                    }`}
-                    style={{ width: `${Math.min(office.occupancyRate, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* 30-day summary */}
+              {/* Click to view details */}
               <div className="mt-6 pt-4 border-t border-slate-100">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">
-                  30-Day Summary
-                </p>
-                <p className="text-sm text-slate-600">
-                  <span className="font-semibold text-slate-900">
-                    {office.totalVisitors.toLocaleString()}
-                  </span>{' '}
-                  total visitors with an average stay of{' '}
-                  <span className="font-semibold text-slate-900">
-                    {formatDuration(office.avgDuration)}
-                  </span>
+                <p className="text-sm text-[#005596] font-medium">
+                  Click to view office details →
                 </p>
               </div>
             </div>
@@ -163,7 +130,7 @@ export function Offices() {
       {/* Summary Table */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900">All Offices Comparison</h3>
+          <h3 className="text-lg font-semibold text-slate-900">All Offices</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -179,21 +146,15 @@ export function Offices() {
                   Capacity
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Current
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Daily Avg
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Utilization
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Timezone
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Status
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {officeStats.map((office) => (
+              {offices.map((office) => (
                 <tr
                   key={office.id}
                   className="hover:bg-slate-50 cursor-pointer"
@@ -208,31 +169,17 @@ export function Offices() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                     {office.capacity}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                    {office.currentOccupancy}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                    {office.avgDaily}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            office.occupancyRate > 80
-                              ? 'bg-red-500'
-                              : office.occupancyRate > 60
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min(office.occupancyRate, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-sm text-slate-600">{office.occupancyRate}%</span>
-                    </div>
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                     {office.timezone}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      office.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {office.is_active ? 'Active' : 'Inactive'}
+                    </span>
                   </td>
                 </tr>
               ))}
