@@ -285,14 +285,16 @@ async function getUserById(request: HttpRequest, context: InvocationContext): Pr
 async function getUserSessions(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const userId = request.params.userId;
-    const limit = parseInt(request.query.get('limit') || '20');
+    const limit = parseInt(request.query.get('limit') || '50');
 
+    // Return access events (door unlocks) instead of sessions for more accurate data
     const result = await pool.query(`
-      SELECT ps.id, o.name as office_name, ps.entry_time, ps.exit_time, ps.duration_minutes
-      FROM presence_sessions ps
-      JOIN offices o ON ps.office_id = o.id
-      WHERE ps.user_id = $1
-      ORDER BY ps.entry_time DESC
+      SELECT ae.id, o.name as office_name, ae.timestamp as entry_time, 
+             ae.device_info as door_name, ae.event_type
+      FROM access_events ae
+      JOIN offices o ON ae.office_id = o.id
+      WHERE ae.user_id = $1
+      ORDER BY ae.timestamp DESC
       LIMIT $2
     `, [userId, limit]);
 
@@ -307,21 +309,30 @@ async function getUserStats(request: HttpRequest, context: InvocationContext): P
   try {
     const userId = request.params.userId;
 
-    const result = await pool.query(`
+    // Count access events (door unlocks) instead of sessions for accurate visit count
+    const accessEvents = await pool.query(`
       SELECT 
-        COUNT(*) as total_visits,
-        COALESCE(SUM(duration_minutes) / 60.0, 0) as total_hours,
-        COALESCE(AVG(duration_minutes), 0) as avg_duration_minutes,
-        MAX(entry_time) as last_visit
-      FROM presence_sessions
+        COUNT(*) as total_events,
+        COUNT(DISTINCT DATE(timestamp)) as unique_days,
+        MAX(timestamp) as last_visit
+      FROM access_events
       WHERE user_id = $1
+    `, [userId]);
+
+    // Also get session-based stats for duration info
+    const sessionStats = await pool.query(`
+      SELECT 
+        COALESCE(SUM(duration_minutes) / 60.0, 0) as total_hours,
+        COALESCE(AVG(duration_minutes), 0) as avg_duration_minutes
+      FROM presence_sessions
+      WHERE user_id = $1 AND duration_minutes IS NOT NULL
     `, [userId]);
 
     const mostVisited = await pool.query(`
       SELECT o.name, COUNT(*) as visit_count
-      FROM presence_sessions ps
-      JOIN offices o ON ps.office_id = o.id
-      WHERE ps.user_id = $1
+      FROM access_events ae
+      JOIN offices o ON ae.office_id = o.id
+      WHERE ae.user_id = $1
       GROUP BY o.name
       ORDER BY visit_count DESC
       LIMIT 1
@@ -331,10 +342,11 @@ async function getUserStats(request: HttpRequest, context: InvocationContext): P
       status: 200, 
       headers: corsHeaders, 
       jsonBody: {
-        total_visits: parseInt(result.rows[0].total_visits) || 0,
-        total_hours: parseFloat(result.rows[0].total_hours) || 0,
-        avg_duration_minutes: Math.round(parseFloat(result.rows[0].avg_duration_minutes) || 0),
-        last_visit: result.rows[0].last_visit,
+        total_visits: parseInt(accessEvents.rows[0].unique_days) || 0,
+        total_access_events: parseInt(accessEvents.rows[0].total_events) || 0,
+        total_hours: parseFloat(sessionStats.rows[0].total_hours) || 0,
+        avg_duration_minutes: Math.round(parseFloat(sessionStats.rows[0].avg_duration_minutes) || 0),
+        last_visit: accessEvents.rows[0].last_visit,
         most_visited_office: mostVisited.rows[0]?.name || null,
       }
     };
@@ -503,4 +515,32 @@ app.http('getOfficeOccupancy', {
   authLevel: 'anonymous',
   route: 'office/{officeId}/occupancy',
   handler: getOfficeOccupancy,
+});
+
+// Admin endpoint to deactivate an office
+async function deactivateOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  const authHeader = request.headers.get('x-init-key');
+  if (authHeader !== process.env.INIT_SECRET_KEY) {
+    return { status: 401, headers: corsHeaders, body: 'Unauthorized' };
+  }
+
+  try {
+    const officeId = request.params.officeId;
+    if (!officeId) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Office ID required' } };
+    }
+
+    await pool.query('UPDATE offices SET is_active = false WHERE id = $1', [officeId]);
+    return { status: 200, headers: corsHeaders, jsonBody: { message: 'Office deactivated' } };
+  } catch (error) {
+    context.error('Failed to deactivate office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('deactivateOffice', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}',
+  handler: deactivateOffice,
 });
