@@ -1,0 +1,21 @@
+{
+  "name": "office-presence-functions",
+  "version": "1.0.0",
+  "description": "Azure Functions for Office Presence Dashboard - EZRADIUS and UniFi Access integration",
+  "main": "dist/src/functions/*.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "func start",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "typescript": "^5.0.0"
+  }
+}
