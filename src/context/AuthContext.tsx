@@ -55,28 +55,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         account: accounts[0],
       });
 
-      const [profileResponse, groupsResponse] = await Promise.all([
-        fetch(graphConfig.graphMeEndpoint, {
-          headers: { Authorization: `Bearer ${response.accessToken}` },
-        }),
-        fetch(graphConfig.graphMemberOfEndpoint, {
-          headers: { Authorization: `Bearer ${response.accessToken}` },
-        }),
-      ]);
-
+      const profileResponse = await fetch(graphConfig.graphMeEndpoint, {
+        headers: { Authorization: `Bearer ${response.accessToken}` },
+      });
       const profile = await profileResponse.json();
-      const groups = await groupsResponse.json();
 
-      console.log('Graph API memberOf response:', groups);
+      // Paginate through all groups (Graph API returns max 100 per page)
+      interface GraphGroup {
+        id: string;
+        displayName: string;
+        '@odata.type': string;
+      }
+      interface GraphMemberOfResponse {
+        value?: GraphGroup[];
+        '@odata.nextLink'?: string;
+      }
+      
+      let allGroups: GraphGroup[] = [];
+      let nextLink: string | null = graphConfig.graphMemberOfEndpoint;
+      
+      while (nextLink) {
+        const groupsRes = await fetch(nextLink, {
+          headers: { Authorization: `Bearer ${response.accessToken}` },
+        });
+        const groupsData: GraphMemberOfResponse = await groupsRes.json();
+        
+        if (groupsData.value) {
+          allGroups = [...allGroups, ...groupsData.value];
+        }
+        
+        nextLink = groupsData['@odata.nextLink'] || null;
+      }
+
+      console.log('Total groups fetched:', allGroups.length);
       console.log('Expected executive group ID:', groupIds.executives);
 
-      const securityGroupIds = groups.value
-        ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
-        .map((g: { id: string }) => g.id) || [];
+      const securityGroupIds = allGroups
+        .filter((g) => g['@odata.type'] === '#microsoft.graph.group')
+        .map((g) => g.id);
 
-      const securityGroups = groups.value
-        ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
-        .map((g: { displayName: string }) => g.displayName) || [];
+      const securityGroups = allGroups
+        .filter((g) => g['@odata.type'] === '#microsoft.graph.group')
+        .map((g) => g.displayName);
 
       console.log('User security group IDs:', securityGroupIds);
       console.log('User security group names:', securityGroups);

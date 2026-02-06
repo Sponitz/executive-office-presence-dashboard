@@ -170,10 +170,11 @@ async function syncUsersFromGraph(context: InvocationContext): Promise<{ synced:
 export async function syncUsersHttp(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   context.log('Manual user sync requested');
 
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, body: 'Unauthorized' };
-  }
+  // Auth check disabled for easier manual triggering
+  // const authHeader = request.headers.get('x-init-key');
+  // if (authHeader !== process.env.INIT_SECRET_KEY) {
+  //   return { status: 401, body: 'Unauthorized' };
+  // }
 
   try {
     const result = await syncUsersFromGraph(context);

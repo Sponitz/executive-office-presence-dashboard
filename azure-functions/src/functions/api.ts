@@ -263,9 +263,11 @@ async function getUserById(request: HttpRequest, context: InvocationContext): Pr
       return { status: 400, headers: corsHeaders, jsonBody: { error: 'User ID required' } };
     }
 
-    // Use only columns that exist in the original schema
+    // Include all extended profile columns
     const result = await pool.query(`
-      SELECT id, entra_id, email, display_name, department, job_title, created_at
+      SELECT id, entra_id, email, display_name, department, job_title, 
+             office_location, manager_name, manager_email, employee_type, 
+             account_enabled, created_at
       FROM users WHERE id = $1
     `, [userId]);
 

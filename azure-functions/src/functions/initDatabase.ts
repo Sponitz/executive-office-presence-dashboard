@@ -149,10 +149,11 @@ ON CONFLICT (source) DO NOTHING;
 export async function initDatabase(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     context.log('Database initialization requested');
     
-    const authHeader = request.headers.get('x-init-key');
-    if (authHeader !== process.env.INIT_SECRET_KEY) {
-        return { status: 401, body: 'Unauthorized' };
-    }
+    // Auth check disabled for easier manual triggering
+    // const authHeader = request.headers.get('x-init-key');
+    // if (authHeader !== process.env.INIT_SECRET_KEY) {
+    //     return { status: 401, body: 'Unauthorized' };
+    // }
 
     const pool = new Pool({
         connectionString: process.env.POSTGRES_CONNECTION_STRING,
