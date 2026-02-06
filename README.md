@@ -1,6 +1,6 @@
-# Office Presence Dashboard
+# Improving Pulse
 
-Executive dashboard for monitoring office attendance and presence trends using EZRADIUS and UniFi Access data.
+The pulse of Improving - Executive dashboard for monitoring office attendance and presence trends using EZRADIUS and UniFi Access data.
 
 ## Features
 
@@ -96,7 +96,7 @@ Executive dashboard for monitoring office attendance and presence trends using E
 
 1. Go to Azure Portal → Entra ID → App registrations
 2. Create new registration:
-   - Name: Office Presence Dashboard
+   - Name: Improving Pulse
    - Supported account types: Single tenant
    - Redirect URI: `https://your-app.azurewebsites.net` (Web)
 
@@ -117,7 +117,7 @@ Create these security groups in Entra ID for role-based access:
 ## Project Structure
 
 ```
-office-presence-dashboard/
+improving-pulse/
 ├── src/
 │   ├── components/     # Reusable UI components
 │   ├── pages/          # Page components

@@ -28,12 +28,12 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorThisWeek" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                <stop offset="5%" stopColor="#005596" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#005596" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorLastWeek" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                <stop offset="5%" stopColor="#A7A8A9" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#A7A8A9" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -52,7 +52,7 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
               type="monotone"
               dataKey="thisWeek"
               name="This Week"
-              stroke="#3b82f6"
+              stroke="#005596"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorThisWeek)"
@@ -61,7 +61,7 @@ export function WeeklyTrendChart({ data }: WeeklyTrendChartProps) {
               type="monotone"
               dataKey="lastWeek"
               name="Last Week"
-              stroke="#94a3b8"
+              stroke="#A7A8A9"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorLastWeek)"
@@ -104,8 +104,8 @@ export function OfficeComparisonChart({ data }: OfficeComparisonChartProps) {
                 name === 'current' ? 'Current' : 'Capacity',
               ]}
             />
-            <Bar dataKey="current" name="Current" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="capacity" name="Capacity" fill="#e2e8f0" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="current" name="Current" fill="#005596" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="capacity" name="Capacity" fill="#A7A8A9" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -131,11 +131,11 @@ export function PeakHoursHeatmap({ data, maxOccupancy }: PeakHoursHeatmapProps) 
   const getColor = (value: number) => {
     if (value === 0) return 'bg-slate-100';
     const intensity = value / maxOccupancy;
-    if (intensity < 0.2) return 'bg-blue-100';
-    if (intensity < 0.4) return 'bg-blue-200';
-    if (intensity < 0.6) return 'bg-blue-300';
-    if (intensity < 0.8) return 'bg-blue-400';
-    return 'bg-blue-500';
+    if (intensity < 0.2) return 'bg-[#4597D3]/20';
+    if (intensity < 0.4) return 'bg-[#4597D3]/40';
+    if (intensity < 0.6) return 'bg-[#4597D3]/60';
+    if (intensity < 0.8) return 'bg-[#005596]/70';
+    return 'bg-[#005596]';
   };
 
   const getValue = (day: number, hour: number) => {
@@ -176,11 +176,11 @@ export function PeakHoursHeatmap({ data, maxOccupancy }: PeakHoursHeatmapProps) 
           <span className="text-xs text-slate-500">Low</span>
           <div className="flex gap-1">
             <div className="w-4 h-4 rounded bg-slate-100" />
-            <div className="w-4 h-4 rounded bg-blue-100" />
-            <div className="w-4 h-4 rounded bg-blue-200" />
-            <div className="w-4 h-4 rounded bg-blue-300" />
-            <div className="w-4 h-4 rounded bg-blue-400" />
-            <div className="w-4 h-4 rounded bg-blue-500" />
+            <div className="w-4 h-4 rounded bg-[#4597D3]/20" />
+            <div className="w-4 h-4 rounded bg-[#4597D3]/40" />
+            <div className="w-4 h-4 rounded bg-[#4597D3]/60" />
+            <div className="w-4 h-4 rounded bg-[#005596]/70" />
+            <div className="w-4 h-4 rounded bg-[#005596]" />
           </div>
           <span className="text-xs text-slate-500">High</span>
         </div>

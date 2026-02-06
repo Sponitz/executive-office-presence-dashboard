@@ -1,26 +1,26 @@
-import { Building2 } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export function Login() {
   const { login, isDemoMode } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#005596] to-[#003d6b] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-6">
-            <Building2 className="w-8 h-8 text-blue-600" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#005596]/10 rounded-full mb-6">
+            <Activity className="w-8 h-8 text-[#005596]" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Office Presence Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Improving Pulse</h1>
           <p className="text-slate-500 mt-2">
-            Monitor office attendance and presence trends across your organization
+            The pulse of Improving - monitor office presence across all locations
           </p>
         </div>
 
         <div className="mt-8 space-y-4">
           <button
             onClick={login}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#005596] text-white rounded-lg font-medium hover:bg-[#004477] transition-colors"
           >
             <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none">
               <path d="M10 0H0V10H10V0Z" fill="#F25022" />
@@ -42,19 +42,19 @@ export function Login() {
           <h3 className="text-sm font-medium text-slate-900 mb-3">Features</h3>
           <ul className="space-y-2 text-sm text-slate-600">
             <li className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-[#005596] rounded-full" />
               Real-time office occupancy tracking
             </li>
             <li className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-[#5BC2A7] rounded-full" />
               Historical attendance trends
             </li>
             <li className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-[#F5BB41] rounded-full" />
               Peak hours analysis
             </li>
             <li className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-[#9D1D96] rounded-full" />
               Multi-office comparison
             </li>
           </ul>

@@ -69,8 +69,8 @@ export function Dashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Office Presence Dashboard</h1>
-          <p className="text-slate-500 mt-1">Monitor office attendance and presence trends</p>
+          <h1 className="text-2xl font-bold text-slate-900">Improving Pulse</h1>
+          <p className="text-slate-500 mt-1">The pulse of Improving - office presence across all locations</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <OfficeSelector

@@ -45,7 +45,7 @@ export function Attendance() {
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
   }, [dailyAttendance, selectedOfficeIds]);
 
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+  const colors = ['#005596', '#5BC2A7', '#F5BB41', '#9D1D96', '#4597D3', '#A7A8A9'];
 
   const selectedOffices = mockOffices.filter((o) => selectedOfficeIds.includes(o.id));
 

@@ -44,8 +44,8 @@ export function Settings() {
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Shield className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-[#005596]/10 rounded-lg">
+              <Shield className="w-5 h-5 text-[#005596]" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Azure AD Configuration</h3>
@@ -97,8 +97,8 @@ export function Settings() {
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Key className="w-5 h-5 text-green-600" />
+            <div className="p-2 bg-[#5BC2A7]/20 rounded-lg">
+              <Key className="w-5 h-5 text-[#5BC2A7]" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-900">API Integrations</h3>
@@ -150,8 +150,8 @@ export function Settings() {
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 rounded-lg">
-              <Database className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-[#9D1D96]/10 rounded-lg">
+              <Database className="w-5 h-5 text-[#9D1D96]" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Database Settings</h3>
@@ -208,8 +208,8 @@ export function Settings() {
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Bell className="w-5 h-5 text-orange-600" />
+            <div className="p-2 bg-[#F5BB41]/20 rounded-lg">
+              <Bell className="w-5 h-5 text-[#F5BB41]" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Notifications</h3>
@@ -261,7 +261,7 @@ export function Settings() {
       <div className="flex items-center gap-4">
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-6 py-2 bg-[#005596] text-white rounded-lg text-sm font-medium hover:bg-[#004477] transition-colors"
         >
           <Save className="w-4 h-4" />
           Save Settings
