@@ -2,8 +2,8 @@ import { Configuration, LogLevel } from '@azure/msal-browser';
 
 export const msalConfig: Configuration = {
   auth: {
-    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || 'YOUR_CLIENT_ID',
-    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || 'YOUR_TENANT_ID'}`,
+    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || 'ac274c9a-9a88-470f-8518-23f740bb0e26',
+    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || 'f2267c2e-5a54-49f4-84fa-e4f2f4038a2e'}`,
     redirectUri: import.meta.env.VITE_REDIRECT_URI || window.location.origin,
     postLogoutRedirectUri: window.location.origin,
   },
@@ -44,7 +44,14 @@ export const graphConfig = {
 };
 
 export const roleMapping: Record<string, 'executive' | 'manager' | 'viewer'> = {
-  '0436b5a2-7512-45bb-b9b5-030f4619564c': 'executive',
-  '45abd4d9-ec6e-43be-baeb-3e4680997405': 'manager',
-  'a76abcda-98c3-4607-8d4c-08bae451803b': 'viewer',
+  'Pulse-Executives': 'executive',
+  'Pulse-Managers': 'manager',
+  'Pulse-Viewers': 'viewer',
+};
+
+export const groupIds = {
+  executives: '0436b5a2-7512-45bb-b9b5-030f4619564c',
+  managers: '45abd4d9-ec6e-43be-baeb-3e4680997405',
+  viewers: 'a76abcda-98c3-4607-8d4c-08bae451803b',
+  trackedUsers: '43bc7a18-9b24-482f-9a79-c3af78621f41',
 };
