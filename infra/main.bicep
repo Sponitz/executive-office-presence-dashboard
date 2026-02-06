@@ -44,6 +44,7 @@ var vnetName = '${appName}-vnet'
 var webSubnetName = 'web-subnet'
 var functionSubnetName = 'function-subnet'
 var privateEndpointSubnetName = 'private-endpoint-subnet'
+var postgresSubnetName = 'postgres-subnet'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
   name: vnetName
@@ -88,6 +89,20 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
         properties: {
           addressPrefix: '10.0.3.0/24'
           privateEndpointNetworkPolicies: 'Disabled'
+        }
+      }
+      {
+        name: postgresSubnetName
+        properties: {
+          addressPrefix: '10.0.4.0/24'
+          delegations: [
+            {
+              name: 'postgres-delegation'
+              properties: {
+                serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers'
+              }
+            }
+          ]
         }
       }
     ]
@@ -285,30 +300,13 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' =
       mode: 'Disabled'
     }
     network: {
-      publicNetworkAccess: 'Disabled'
+      delegatedSubnetResourceId: vnet.properties.subnets[3].id
+      privateDnsZoneArmResourceId: privateDnsZonePostgres.id
     }
   }
-}
-
-resource postgresPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
-  name: '${postgresServerName}-pe'
-  location: location
-  properties: {
-    subnet: {
-      id: vnet.properties.subnets[2].id
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${postgresServerName}-connection'
-        properties: {
-          privateLinkServiceId: postgresServer.id
-          groupIds: [
-            'postgresqlServer'
-          ]
-        }
-      }
-    ]
-  }
+  dependsOn: [
+    privateDnsZonePostgresLink
+  ]
 }
 
 resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01' = {
@@ -401,26 +399,12 @@ resource storageFileDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
   }
 }
 
-resource postgresDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
-  parent: postgresPrivateEndpoint
-  name: 'default'
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'config'
-        properties: {
-          privateDnsZoneId: privateDnsZonePostgres.id
-        }
-      }
-    ]
-  }
-}
 
 resource frontDoor 'Microsoft.Cdn/profiles@2023-05-01' = {
   name: '${appName}-fd'
   location: 'global'
   sku: {
-    name: 'Standard_AzureFrontDoor'
+    name: 'Premium_AzureFrontDoor'
   }
 }
 
