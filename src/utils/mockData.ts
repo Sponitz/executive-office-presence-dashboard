@@ -8,12 +8,26 @@ import type {
 } from '@/types';
 
 export const mockOffices: Office[] = [
-  { id: 'office-1', name: 'Dallas HQ', location: 'Dallas, TX', capacity: 150, timezone: 'America/Chicago' },
-  { id: 'office-2', name: 'Houston Office', location: 'Houston, TX', capacity: 80, timezone: 'America/Chicago' },
-  { id: 'office-3', name: 'Austin Office', location: 'Austin, TX', capacity: 60, timezone: 'America/Chicago' },
-  { id: 'office-4', name: 'San Antonio Office', location: 'San Antonio, TX', capacity: 45, timezone: 'America/Chicago' },
-  { id: 'office-5', name: 'Denver Office', location: 'Denver, CO', capacity: 55, timezone: 'America/Denver' },
-  { id: 'office-6', name: 'Phoenix Office', location: 'Phoenix, AZ', capacity: 40, timezone: 'America/Phoenix' },
+  { id: 'office-1', name: 'Dallas HQ', location: 'Plano, TX', capacity: 150, timezone: 'America/Chicago' },
+  { id: 'office-2', name: 'Atlanta', location: 'Alpharetta, GA', capacity: 80, timezone: 'America/New_York' },
+  { id: 'office-3', name: 'Austin', location: 'Austin, TX', capacity: 60, timezone: 'America/Chicago' },
+  { id: 'office-4', name: 'Chicago', location: 'Chicago, IL', capacity: 70, timezone: 'America/Chicago' },
+  { id: 'office-5', name: 'Cleveland', location: 'Independence, OH', capacity: 50, timezone: 'America/New_York' },
+  { id: 'office-6', name: 'Columbus', location: 'Columbus, OH', capacity: 50, timezone: 'America/New_York' },
+  { id: 'office-7', name: 'Houston', location: 'Houston, TX', capacity: 80, timezone: 'America/Chicago' },
+  { id: 'office-8', name: 'Minneapolis', location: 'Minneapolis, MN', capacity: 60, timezone: 'America/Chicago' },
+  { id: 'office-9', name: 'Omaha', location: 'Omaha, NE', capacity: 40, timezone: 'America/Chicago' },
+  { id: 'office-10', name: 'Calgary', location: 'Calgary, AB', capacity: 50, timezone: 'America/Edmonton' },
+  { id: 'office-11', name: 'Ottawa', location: 'Ottawa, ON', capacity: 50, timezone: 'America/Toronto' },
+  { id: 'office-12', name: 'Vancouver', location: 'Vancouver, BC', capacity: 50, timezone: 'America/Vancouver' },
+  { id: 'office-13', name: 'Toronto', location: 'Toronto, ON', capacity: 60, timezone: 'America/Toronto' },
+  { id: 'office-14', name: 'Winnipeg', location: 'Winnipeg, MB', capacity: 40, timezone: 'America/Winnipeg' },
+  { id: 'office-15', name: 'Aguascalientes', location: 'Aguascalientes, MX', capacity: 40, timezone: 'America/Mexico_City' },
+  { id: 'office-16', name: 'Guadalajara', location: 'Guadalajara, MX', capacity: 50, timezone: 'America/Mexico_City' },
+  { id: 'office-17', name: 'Buenos Aires', location: 'Buenos Aires, AR', capacity: 40, timezone: 'America/Argentina/Buenos_Aires' },
+  { id: 'office-18', name: 'Santiago', location: 'Santiago, CL', capacity: 40, timezone: 'America/Santiago' },
+  { id: 'office-19', name: 'Guatemala City', location: 'Guatemala City, GT', capacity: 30, timezone: 'America/Guatemala' },
+  { id: 'office-20', name: 'Pune', location: 'Pune, IN', capacity: 50, timezone: 'Asia/Kolkata' },
 ];
 
 export const mockUsers: User[] = [

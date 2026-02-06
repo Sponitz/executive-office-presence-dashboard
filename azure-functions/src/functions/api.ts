@@ -166,6 +166,47 @@ async function getUserPresence(request: HttpRequest, context: InvocationContext)
   }
 }
 
+async function getUsers(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const limit = parseInt(request.query.get('limit') || '100');
+    const offset = parseInt(request.query.get('offset') || '0');
+    const search = request.query.get('search');
+
+    let query = `
+      SELECT id, entra_id, email, display_name, department, job_title, created_at
+      FROM users
+    `;
+    const params: (string | number)[] = [];
+    let paramIndex = 1;
+
+    if (search) {
+      query += ` WHERE display_name ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR department ILIKE $${paramIndex}`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY display_name LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(query, params);
+    
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM users');
+
+    return { 
+      status: 200, 
+      jsonBody: {
+        users: result.rows,
+        total: parseInt(countResult.rows[0].total),
+        limit,
+        offset
+      }
+    };
+  } catch (error) {
+    context.error('Failed to get users:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
 app.http('getStats', {
   methods: ['GET'],
   authLevel: 'anonymous',
@@ -199,4 +240,11 @@ app.http('getUserPresence', {
   authLevel: 'anonymous',
   route: 'user-presence',
   handler: getUserPresence,
+});
+
+app.http('getUsers', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'users',
+  handler: getUsers,
 });
