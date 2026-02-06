@@ -18,7 +18,7 @@ async function syncUnifiAccess(myTimer: Timer, context: InvocationContext): Prom
   try {
     const lastSync = await getLastSyncTimestamp('unifi_access');
     const doors = await fetchDoors();
-    const doorToSiteMap = new Map(doors.map((d) => [d.id, d.site_id]));
+    const doorToLocationMap = new Map(doors.map((d) => [d.id, d.location]));
 
     const events = await fetchAccessEvents(lastSync || undefined);
     context.log(`Fetched ${events.length} events from UniFi Access`);
@@ -33,19 +33,19 @@ async function syncUnifiAccess(myTimer: Timer, context: InvocationContext): Prom
       const eventType = mapEventType(event.event_type);
       if (!eventType) continue;
 
-      const siteId = doorToSiteMap.get(event.door_id);
-      if (!siteId) continue;
+      const locationId = doorToLocationMap.get(event.door_id);
+      if (!locationId) continue;
 
-      const office = await getOfficeByUnifiSiteId(siteId);
+      const office = await getOfficeByUnifiSiteId(locationId);
       if (!office) continue;
 
-      const userEmail = event.user?.email;
+      const userEmail = event.user_email;
       if (!userEmail) continue;
 
       const user = await getUserByEmail(userEmail);
       if (!user) continue;
 
-      const timestamp = new Date(event.timestamp * 1000);
+      const timestamp = new Date(event.timestamp);
 
       await insertAccessEvent({
         user_id: user.id,

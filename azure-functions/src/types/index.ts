@@ -48,23 +48,23 @@ export interface DailyAttendance {
 
 export interface UnifiAccessEvent {
   id: string;
-  actor_id: string;
-  event_type: string;
   door_id: string;
-  timestamp: number;
-  user?: {
-    id: string;
-    email: string;
-    name: string;
-  };
+  door_name?: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  event_type: string;
+  timestamp: string;
+  result: string;
 }
 
 export interface EzradiusAuthEvent {
   id: string;
   username: string;
-  mac_address: string;
   nas_ip: string;
-  event_type: string;
+  nas_identifier: string;
+  calling_station_id: string;
+  event_type: 'Access-Accept' | 'Access-Reject';
   timestamp: string;
-  location_id?: string;
+  location?: string;
 }

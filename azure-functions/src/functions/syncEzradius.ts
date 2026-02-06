@@ -32,8 +32,8 @@ async function syncEzradius(myTimer: Timer, context: InvocationContext): Promise
       const user = await getUserByEmail(email);
       if (!user) continue;
 
-      const office = event.location_id
-        ? await getOfficeByEzradiusLocationId(event.location_id)
+      const office = event.location
+        ? await getOfficeByEzradiusLocationId(event.location)
         : null;
       if (!office) continue;
 
@@ -44,7 +44,7 @@ async function syncEzradius(myTimer: Timer, context: InvocationContext): Promise
         office_id: office.id,
         event_type: 'entry',
         source: 'ezradius',
-        device_info: event.mac_address,
+        device_info: event.calling_station_id,
         raw_event_id: event.id,
         timestamp,
       });
