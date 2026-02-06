@@ -44,7 +44,7 @@ export const graphConfig = {
 };
 
 export const roleMapping: Record<string, 'executive' | 'manager' | 'viewer'> = {
-  'Office-Dashboard-Executives': 'executive',
-  'Office-Dashboard-Managers': 'manager',
-  'Office-Dashboard-Viewers': 'viewer',
+  '0436b5a2-7512-45bb-b9b5-030f4619564c': 'executive',
+  '45abd4d9-ec6e-43be-baeb-3e4680997405': 'manager',
+  'a76abcda-98c3-4607-8d4c-08bae451803b': 'viewer',
 };
