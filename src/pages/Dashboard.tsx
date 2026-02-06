@@ -15,10 +15,12 @@ import {
   getOffices,
   getHourlyOccupancy,
   getUserPresence,
+  getWeeklyTrends,
   type DashboardStats,
   type Office,
   type HourlyOccupancy,
   type UserPresenceSummary,
+  type WeeklyTrendData,
 } from '@/services/api';
 
 export function Dashboard() {
@@ -40,23 +42,26 @@ export function Dashboard() {
   const [hourlyOccupancy, setHourlyOccupancy] = useState<HourlyOccupancy[]>([]);
   const [userPresence, setUserPresence] = useState<UserPresenceSummary[]>([]);
   const [officeComparison, setOfficeComparison] = useState<{ name: string; current: number; capacity: number; occupancyRate: number }[]>([]);
+  const [weeklyTrends, setWeeklyTrends] = useState<WeeklyTrendData[]>([]);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
-        const [statsData, officesData, hourlyData, presenceData] = await Promise.all([
-          getStats(),
-          getOffices(),
-          getHourlyOccupancy(),
-          getUserPresence(),
-        ]);
+                const [statsData, officesData, hourlyData, presenceData, trendsData] = await Promise.all([
+                  getStats(),
+                  getOffices(),
+                  getHourlyOccupancy(),
+                  getUserPresence(),
+                  getWeeklyTrends(),
+                ]);
 
-        setStats(statsData);
-        setOffices(officesData);
-        setSelectedOfficeIds(officesData.map((o) => o.id));
-        setHourlyOccupancy(hourlyData);
-        setUserPresence(presenceData);
+                setStats(statsData);
+                setOffices(officesData);
+                setSelectedOfficeIds(officesData.map((o) => o.id));
+                setHourlyOccupancy(hourlyData);
+                setUserPresence(presenceData);
+                setWeeklyTrends(trendsData);
 
         const comparison = officesData.map((office) => ({
           name: office.name,
@@ -179,7 +184,7 @@ export function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <WeeklyTrendChart data={[]} />
+        <WeeklyTrendChart data={weeklyTrends.map(t => ({ date: t.date, visitors: Number(t.unique_visitors) }))} />
         <OfficeComparisonChart data={filteredOfficeComparison} />
       </div>
 

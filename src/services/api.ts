@@ -134,17 +134,16 @@ export interface UserPresenceSummary {
 }
 
 export interface WeeklyTrendData {
-  day: string;
-  thisWeek: number;
-  lastWeek: number;
+  date: string;
+  unique_visitors: number;
 }
 
-export async function getWeeklyTrend(): Promise<WeeklyTrendData[]> {
+export async function getWeeklyTrends(): Promise<WeeklyTrendData[]> {
   try {
-    const data = await fetchApi<WeeklyTrendData[]>('/weekly-trend');
+    const data = await fetchApi<WeeklyTrendData[]>('/weekly-trends');
     return data || [];
   } catch (error) {
-    console.error('Failed to fetch weekly trend:', error);
+    console.error('Failed to fetch weekly trends:', error);
     return [];
   }
 }
