@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Users, Clock, TrendingUp, Building2 } from 'lucide-react';
 import { subDays } from 'date-fns';
 import {
@@ -11,35 +11,75 @@ import {
   DateRangePicker,
 } from '@/components';
 import {
-  mockOffices,
-  generateDashboardStats,
-  getWeeklyTrendData,
-  getOfficeComparisonData,
-  generateHourlyOccupancy,
-  generateUserPresenceSummaries,
-} from '@/utils/mockData';
+  getStats,
+  getOffices,
+  getHourlyOccupancy,
+  getUserPresence,
+  type DashboardStats,
+  type Office,
+  type HourlyOccupancy,
+  type UserPresenceSummary,
+} from '@/services/api';
 
 export function Dashboard() {
-  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>(
-    mockOffices.map((o) => o.id)
-  );
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState({
     start: subDays(new Date(), 29),
     end: new Date(),
   });
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    currentOccupancy: 0,
+    totalCapacity: 0,
+    averageDailyAttendance: 0,
+    averageStayDuration: 0,
+    weekOverWeekChange: 0,
+    activeOffices: 0,
+  });
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [hourlyOccupancy, setHourlyOccupancy] = useState<HourlyOccupancy[]>([]);
+  const [userPresence, setUserPresence] = useState<UserPresenceSummary[]>([]);
+  const [officeComparison, setOfficeComparison] = useState<{ name: string; current: number; capacity: number; occupancyRate: number }[]>([]);
 
-  const stats = useMemo(() => generateDashboardStats(), []);
-  const weeklyTrend = useMemo(() => getWeeklyTrendData(), []);
-  const officeComparison = useMemo(() => getOfficeComparisonData(), []);
-  const hourlyOccupancy = useMemo(() => generateHourlyOccupancy(), []);
-  const userPresence = useMemo(() => generateUserPresenceSummaries(), []);
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [statsData, officesData, hourlyData, presenceData] = await Promise.all([
+          getStats(),
+          getOffices(),
+          getHourlyOccupancy(),
+          getUserPresence(),
+        ]);
 
-  const filteredHourlyOccupancy = useMemo(() => {
-    if (selectedOfficeIds.length === 0) return [];
-    return hourlyOccupancy.filter((h) => selectedOfficeIds.includes(h.officeId));
-  }, [hourlyOccupancy, selectedOfficeIds]);
+        setStats(statsData);
+        setOffices(officesData);
+        setSelectedOfficeIds(officesData.map((o) => o.id));
+        setHourlyOccupancy(hourlyData);
+        setUserPresence(presenceData);
 
-  const aggregatedHourlyOccupancy = useMemo(() => {
+        const comparison = officesData.map((office) => ({
+          name: office.name,
+          current: 0,
+          capacity: office.capacity,
+          occupancyRate: 0,
+        }));
+        setOfficeComparison(comparison);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  const filteredHourlyOccupancy = selectedOfficeIds.length === 0 
+    ? [] 
+    : hourlyOccupancy.filter((h) => selectedOfficeIds.includes(h.officeId));
+
+  const aggregatedHourlyOccupancy = (() => {
     const aggregated: Record<string, { hour: number; dayOfWeek: number; averageOccupancy: number }> = {};
     
     for (const item of filteredHourlyOccupancy) {
@@ -51,18 +91,36 @@ export function Dashboard() {
     }
     
     return Object.values(aggregated);
-  }, [filteredHourlyOccupancy]);
+  })();
 
-  const maxOccupancy = useMemo(() => {
-    return Math.max(...aggregatedHourlyOccupancy.map((h) => h.averageOccupancy), 1);
-  }, [aggregatedHourlyOccupancy]);
+  const maxOccupancy = Math.max(...aggregatedHourlyOccupancy.map((h) => h.averageOccupancy), 1);
 
-  const filteredOfficeComparison = useMemo(() => {
-    return officeComparison.filter((o) => {
-      const office = mockOffices.find((mo) => mo.name === o.name);
-      return office && selectedOfficeIds.includes(office.id);
-    });
-  }, [officeComparison, selectedOfficeIds]);
+  const filteredOfficeComparison = officeComparison.filter((o) => {
+    const office = offices.find((mo) => mo.name === o.name);
+    return office && selectedOfficeIds.includes(office.id);
+  });
+
+  const userPresenceForTable = userPresence.map((up) => ({
+    userId: up.userId,
+    user: {
+      id: up.userId,
+      email: up.email,
+      displayName: up.displayName,
+    },
+    totalVisits: up.totalVisits,
+    totalMinutes: up.totalMinutes,
+    averageMinutesPerVisit: up.averageMinutesPerVisit,
+    lastVisit: up.lastVisit ? new Date(up.lastVisit) : undefined,
+    primaryOffice: up.primaryOffice || undefined,
+  }));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#005596]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -74,7 +132,7 @@ export function Dashboard() {
         </div>
         <div className="flex flex-wrap gap-3">
           <OfficeSelector
-            offices={mockOffices}
+            offices={offices}
             selectedOfficeIds={selectedOfficeIds}
             onChange={setSelectedOfficeIds}
           />
@@ -121,7 +179,7 @@ export function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <WeeklyTrendChart data={weeklyTrend} />
+        <WeeklyTrendChart data={[]} />
         <OfficeComparisonChart data={filteredOfficeComparison} />
       </div>
 
@@ -129,7 +187,7 @@ export function Dashboard() {
       <PeakHoursHeatmap data={aggregatedHourlyOccupancy} maxOccupancy={maxOccupancy} />
 
       {/* Top Visitors Table */}
-      <DataTable data={userPresence} title="Top Office Visitors" />
+      <DataTable data={userPresenceForTable} title="Top Office Visitors" />
     </div>
   );
 }

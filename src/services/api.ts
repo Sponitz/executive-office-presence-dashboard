@@ -54,8 +54,8 @@ async function fetchApi<T>(endpoint: string): Promise<T> {
 
 export async function getOffices(): Promise<Office[]> {
   try {
-    const data = await fetchApi<{ offices: Office[] }>('/offices');
-    return data.offices || [];
+    const data = await fetchApi<Office[]>('/offices');
+    return data || [];
   } catch (error) {
     console.error('Failed to fetch offices:', error);
     return [];
@@ -84,8 +84,8 @@ export async function getAttendance(startDate?: string, endDate?: string): Promi
     if (startDate && endDate) {
       url += `?startDate=${startDate}&endDate=${endDate}`;
     }
-    const data = await fetchApi<{ attendance: DailyAttendance[] }>(url);
-    return data.attendance || [];
+    const data = await fetchApi<DailyAttendance[]>(url);
+    return data || [];
   } catch (error) {
     console.error('Failed to fetch attendance:', error);
     return [];
@@ -94,8 +94,8 @@ export async function getAttendance(startDate?: string, endDate?: string): Promi
 
 export async function getHourlyOccupancy(): Promise<HourlyOccupancy[]> {
   try {
-    const data = await fetchApi<{ occupancy: HourlyOccupancy[] }>('/hourly-occupancy');
-    return data.occupancy || [];
+    const data = await fetchApi<HourlyOccupancy[]>('/hourly-occupancy');
+    return data || [];
   } catch (error) {
     console.error('Failed to fetch hourly occupancy:', error);
     return [];
@@ -104,10 +104,64 @@ export async function getHourlyOccupancy(): Promise<HourlyOccupancy[]> {
 
 export async function getUsers(): Promise<User[]> {
   try {
-    const data = await fetchApi<{ users: User[] }>('/users');
+    const data = await fetchApi<{ users: User[], total: number }>('/users');
     return data.users || [];
   } catch (error) {
     console.error('Failed to fetch users:', error);
+    return [];
+  }
+}
+
+export async function getUserPresence(): Promise<UserPresenceSummary[]> {
+  try {
+    const data = await fetchApi<UserPresenceSummary[]>('/user-presence');
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch user presence:', error);
+    return [];
+  }
+}
+
+export interface UserPresenceSummary {
+  userId: string;
+  displayName: string;
+  email: string;
+  totalVisits: number;
+  totalMinutes: number;
+  averageMinutesPerVisit: number;
+  lastVisit: string | null;
+  primaryOffice: string | null;
+}
+
+export interface WeeklyTrendData {
+  day: string;
+  thisWeek: number;
+  lastWeek: number;
+}
+
+export async function getWeeklyTrend(): Promise<WeeklyTrendData[]> {
+  try {
+    const data = await fetchApi<WeeklyTrendData[]>('/weekly-trend');
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch weekly trend:', error);
+    return [];
+  }
+}
+
+export interface OfficeComparison {
+  name: string;
+  current: number;
+  capacity: number;
+  occupancyRate: number;
+}
+
+export async function getOfficeComparison(): Promise<OfficeComparison[]> {
+  try {
+    const data = await fetchApi<OfficeComparison[]>('/office-comparison');
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch office comparison:', error);
     return [];
   }
 }
