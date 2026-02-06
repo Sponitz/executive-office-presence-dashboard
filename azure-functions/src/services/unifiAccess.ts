@@ -1,4 +1,10 @@
 import type { UnifiAccessEvent } from '../types/index.js';
+import https from 'https';
+
+// Create an HTTPS agent that ignores SSL certificate errors (UniFi uses self-signed certs)
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
 
 // Support multiple UniFi Access controllers
 // Minneapolis: access.msp.improving.com:12445
@@ -58,53 +64,85 @@ interface UnifiAccessLogEntry {
 }
 
 interface FetchLogsRequest {
-  start_time?: number;
-  end_time?: number;
-  page_num?: number;
-  page_size?: number;
+  topic: string;
+  since?: number;
+  until?: number;
+}
+
+interface SystemLogHit {
+  '@timestamp': string;
+  _id: string;
+  _source: {
+    actor: {
+      id: string;
+      display_name: string;
+      type: string;
+    };
+    event: {
+      type: string;
+      result: string;
+      published: number;
+      log_key: string;
+    };
+    target: Array<{
+      id: string;
+      display_name: string;
+      type: string;
+    }>;
+  };
+}
+
+interface SystemLogsResponse {
+  hits: SystemLogHit[];
+  total: number;
 }
 
 export async function fetchAccessEvents(since?: Date, limit: number = 100): Promise<UnifiAccessEvent[]> {
   const now = Math.floor(Date.now() / 1000);
-  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 300;
+  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 86400; // Default to last 24 hours
   
   const requestBody: FetchLogsRequest = {
-    start_time: startTime,
-    end_time: now,
-    page_num: 1,
-    page_size: limit,
+    topic: 'door_openings',
+    since: startTime * 1000, // API expects milliseconds
+    until: now * 1000,
   };
 
-  const response = await fetch(`${UNIFI_ACCESS_URL}/api/v1/developer/access_logs/fetch`, {
+  // Use native fetch with custom dispatcher for SSL bypass in Node.js 18+
+  const response = await fetch(`${UNIFI_ACCESS_URL}/api/v1/developer/system/logs?page_num=1&page_size=${limit}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${UNIFI_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(requestBody),
+    // @ts-expect-error - Node.js specific option for SSL bypass
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
     throw new Error(`UniFi Access API error: ${response.status} ${response.statusText}`);
   }
 
-  const result: UnifiApiResponse<UnifiAccessLogEntry[]> = await response.json();
+  const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
   
   if (result.code !== 'SUCCESS') {
     throw new Error(`UniFi Access API error: ${result.msg}`);
   }
 
-  return result.data.map(entry => ({
-    id: entry._id,
-    door_id: entry.door_id,
-    door_name: entry.door_name,
-    user_id: entry.actor_id,
-    user_name: entry.full_name || `${entry.first_name || ''} ${entry.last_name || ''}`.trim(),
-    user_email: entry.user_email,
-    event_type: entry.event_type,
-    timestamp: new Date(entry.event_time * 1000).toISOString(),
-    result: entry.result,
-  }));
+  return result.data.hits.map(hit => {
+    const doorTarget = hit._source.target.find(t => t.type === 'door');
+    return {
+      id: hit._id,
+      door_id: doorTarget?.id || '',
+      door_name: doorTarget?.display_name,
+      user_id: hit._source.actor.id,
+      user_name: hit._source.actor.display_name,
+      user_email: undefined,
+      event_type: hit._source.event.type,
+      timestamp: hit['@timestamp'],
+      result: hit._source.event.result,
+    };
+  });
 }
 
 export async function fetchDoors(): Promise<Array<{ id: string; name: string; location?: string }>> {
@@ -114,6 +152,8 @@ export async function fetchDoors(): Promise<Array<{ id: string; name: string; lo
       'Authorization': `Bearer ${UNIFI_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
     },
+    // @ts-expect-error - Node.js specific option for SSL bypass
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
@@ -140,6 +180,8 @@ export async function fetchUsers(): Promise<Array<{ id: string; name: string; em
       'Authorization': `Bearer ${UNIFI_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
     },
+    // @ts-expect-error - Node.js specific option for SSL bypass
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
@@ -175,46 +217,50 @@ export async function fetchAccessEventsFromController(
   limit: number = 100
 ): Promise<UnifiAccessEvent[]> {
   const now = Math.floor(Date.now() / 1000);
-  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 300;
+  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 86400; // Default to last 24 hours
   
   const requestBody: FetchLogsRequest = {
-    start_time: startTime,
-    end_time: now,
-    page_num: 1,
-    page_size: limit,
+    topic: 'door_openings',
+    since: startTime * 1000, // API expects milliseconds
+    until: now * 1000,
   };
 
-  const response = await fetch(`${controller.url}/api/v1/developer/access_logs/fetch`, {
+  const response = await fetch(`${controller.url}/api/v1/developer/system/logs?page_num=1&page_size=${limit}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${controller.token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(requestBody),
+    // @ts-expect-error - Node.js specific option for SSL bypass
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
     throw new Error(`UniFi Access API error (${controller.name}): ${response.status} ${response.statusText}`);
   }
 
-  const result: UnifiApiResponse<UnifiAccessLogEntry[]> = await response.json();
+  const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
   
   if (result.code !== 'SUCCESS') {
     throw new Error(`UniFi Access API error (${controller.name}): ${result.msg}`);
   }
 
-  return result.data.map(entry => ({
-    id: `${controller.name}_${entry._id}`,
-    door_id: entry.door_id,
-    door_name: entry.door_name,
-    user_id: entry.actor_id,
-    user_name: entry.full_name || `${entry.first_name || ''} ${entry.last_name || ''}`.trim(),
-    user_email: entry.user_email,
-    event_type: entry.event_type,
-    timestamp: new Date(entry.event_time * 1000).toISOString(),
-    result: entry.result,
-    controller: controller.name,
-  }));
+  return result.data.hits.map(hit => {
+    const doorTarget = hit._source.target.find(t => t.type === 'door');
+    return {
+      id: `${controller.name}_${hit._id}`,
+      door_id: doorTarget?.id || '',
+      door_name: doorTarget?.display_name,
+      user_id: hit._source.actor.id,
+      user_name: hit._source.actor.display_name,
+      user_email: undefined,
+      event_type: hit._source.event.type,
+      timestamp: hit['@timestamp'],
+      result: hit._source.event.result,
+      controller: controller.name,
+    };
+  });
 }
 
 // Fetch doors from a specific controller
@@ -227,6 +273,8 @@ export async function fetchDoorsFromController(
       'Authorization': `Bearer ${controller.token}`,
       'Content-Type': 'application/json',
     },
+    // @ts-expect-error - Node.js specific option for SSL bypass
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
