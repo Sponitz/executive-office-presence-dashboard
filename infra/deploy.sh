@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-RESOURCE_GROUP="improving-pulse-rg"
+RESOURCE_GROUP="pulse-rg"
 LOCATION="centralus"
 POSTGRES_PASSWORD=""
 EZRADIUS_API_KEY=""
