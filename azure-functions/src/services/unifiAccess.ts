@@ -38,9 +38,9 @@ function getControllers(): UnifiController[] {
   return controllers;
 }
 
-// Legacy single controller support
-const UNIFI_ACCESS_URL = process.env.UNIFI_ACCESS_URL || process.env.UNIFI_MSP_URL || '';
-const UNIFI_ACCESS_TOKEN = process.env.UNIFI_ACCESS_TOKEN || process.env.UNIFI_MSP_TOKEN || '';
+// Legacy single controller support - prefer MSP (Minneapolis) since it's the one that's port-forwarded
+const UNIFI_ACCESS_URL = process.env.UNIFI_MSP_URL || process.env.UNIFI_ACCESS_URL || '';
+const UNIFI_ACCESS_TOKEN = process.env.UNIFI_MSP_TOKEN || process.env.UNIFI_ACCESS_TOKEN || '';
 
 interface UnifiApiResponse<T> {
   code: string;
@@ -97,52 +97,74 @@ interface SystemLogsResponse {
   total: number;
 }
 
-export async function fetchAccessEvents(since?: Date, limit: number = 100): Promise<UnifiAccessEvent[]> {
-  const now = Math.floor(Date.now() / 1000);
-  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 86400; // Default to last 24 hours
+export async function fetchAccessEvents(since?: Date, limit: number = 1000, maxPages: number = 50): Promise<UnifiAccessEvent[]> {
+  const allEvents: UnifiAccessEvent[] = [];
+  const pageSize = 25; // UniFi API works best with smaller page sizes
+  let page = 1;
+  let hasMore = true;
   
   const requestBody: FetchLogsRequest = {
     topic: 'door_openings',
-    since: startTime * 1000, // API expects milliseconds
-    until: now * 1000,
   };
 
-  // Use native fetch with custom dispatcher for SSL bypass in Node.js 18+
-  const response = await fetch(`${UNIFI_ACCESS_URL}/api/v1/developer/system/logs?page_num=1&page_size=${limit}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${UNIFI_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-    // @ts-expect-error - Node.js specific option for SSL bypass
-    agent: httpsAgent,
-  });
+  while (hasMore && page <= maxPages && allEvents.length < limit) {
+    const response = await fetch(`${UNIFI_ACCESS_URL}/api/v1/developer/system/logs?page_num=${page}&page_size=${pageSize}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${UNIFI_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      // @ts-expect-error - Node.js specific option for SSL bypass
+      agent: httpsAgent,
+    });
 
-  if (!response.ok) {
-    throw new Error(`UniFi Access API error: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`UniFi Access API error: ${response.status} ${response.statusText}`);
+    }
+
+    const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
+    
+    if (result.code !== 'SUCCESS') {
+      throw new Error(`UniFi Access API error: ${result.msg}`);
+    }
+
+    const hits = result.data.hits;
+    if (hits.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (const hit of hits) {
+      const eventTimestamp = new Date(hit['@timestamp']);
+      
+      // If we have a since date, skip events older than it
+      if (since && eventTimestamp < since) {
+        hasMore = false;
+        break;
+      }
+      
+      const doorTarget = hit._source.target.find(t => t.type === 'door');
+      allEvents.push({
+        id: hit._id,
+        door_id: doorTarget?.id || '',
+        door_name: doorTarget?.display_name,
+        user_id: hit._source.actor.id,
+        user_name: hit._source.actor.display_name,
+        user_email: undefined,
+        event_type: hit._source.event.type,
+        timestamp: hit['@timestamp'],
+        result: hit._source.event.result,
+      });
+    }
+
+    page++;
+    
+    // Small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
-  
-  if (result.code !== 'SUCCESS') {
-    throw new Error(`UniFi Access API error: ${result.msg}`);
-  }
-
-  return result.data.hits.map(hit => {
-    const doorTarget = hit._source.target.find(t => t.type === 'door');
-    return {
-      id: hit._id,
-      door_id: doorTarget?.id || '',
-      door_name: doorTarget?.display_name,
-      user_id: hit._source.actor.id,
-      user_name: hit._source.actor.display_name,
-      user_email: undefined,
-      event_type: hit._source.event.type,
-      timestamp: hit['@timestamp'],
-      result: hit._source.event.result,
-    };
-  });
+  return allEvents;
 }
 
 export async function fetchDoors(): Promise<Array<{ id: string; name: string; location?: string }>> {
@@ -210,57 +232,81 @@ export function mapEventType(unifiEventType: string): 'entry' | 'exit' | null {
   return null;
 }
 
-// Fetch events from a specific controller
+// Fetch events from a specific controller with pagination
 export async function fetchAccessEventsFromController(
   controller: UnifiController,
   since?: Date,
-  limit: number = 100
+  limit: number = 1000,
+  maxPages: number = 50
 ): Promise<UnifiAccessEvent[]> {
-  const now = Math.floor(Date.now() / 1000);
-  const startTime = since ? Math.floor(since.getTime() / 1000) : now - 86400; // Default to last 24 hours
+  const allEvents: UnifiAccessEvent[] = [];
+  const pageSize = 25;
+  let page = 1;
+  let hasMore = true;
   
   const requestBody: FetchLogsRequest = {
     topic: 'door_openings',
-    since: startTime * 1000, // API expects milliseconds
-    until: now * 1000,
   };
 
-  const response = await fetch(`${controller.url}/api/v1/developer/system/logs?page_num=1&page_size=${limit}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${controller.token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-    // @ts-expect-error - Node.js specific option for SSL bypass
-    agent: httpsAgent,
-  });
+  while (hasMore && page <= maxPages && allEvents.length < limit) {
+    const response = await fetch(`${controller.url}/api/v1/developer/system/logs?page_num=${page}&page_size=${pageSize}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${controller.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      // @ts-expect-error - Node.js specific option for SSL bypass
+      agent: httpsAgent,
+    });
 
-  if (!response.ok) {
-    throw new Error(`UniFi Access API error (${controller.name}): ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`UniFi Access API error (${controller.name}): ${response.status} ${response.statusText}`);
+    }
+
+    const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
+    
+    if (result.code !== 'SUCCESS') {
+      throw new Error(`UniFi Access API error (${controller.name}): ${result.msg}`);
+    }
+
+    const hits = result.data.hits;
+    if (hits.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (const hit of hits) {
+      const eventTimestamp = new Date(hit['@timestamp']);
+      
+      // If we have a since date, skip events older than it
+      if (since && eventTimestamp < since) {
+        hasMore = false;
+        break;
+      }
+      
+      const doorTarget = hit._source.target.find(t => t.type === 'door');
+      allEvents.push({
+        id: `${controller.name}_${hit._id}`,
+        door_id: doorTarget?.id || '',
+        door_name: doorTarget?.display_name,
+        user_id: hit._source.actor.id,
+        user_name: hit._source.actor.display_name,
+        user_email: undefined,
+        event_type: hit._source.event.type,
+        timestamp: hit['@timestamp'],
+        result: hit._source.event.result,
+        controller: controller.name,
+      });
+    }
+
+    page++;
+    
+    // Small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  const result: UnifiApiResponse<SystemLogsResponse> = await response.json();
-  
-  if (result.code !== 'SUCCESS') {
-    throw new Error(`UniFi Access API error (${controller.name}): ${result.msg}`);
-  }
-
-  return result.data.hits.map(hit => {
-    const doorTarget = hit._source.target.find(t => t.type === 'door');
-    return {
-      id: `${controller.name}_${hit._id}`,
-      door_id: doorTarget?.id || '',
-      door_name: doorTarget?.display_name,
-      user_id: hit._source.actor.id,
-      user_name: hit._source.actor.display_name,
-      user_email: undefined,
-      event_type: hit._source.event.type,
-      timestamp: hit['@timestamp'],
-      result: hit._source.event.result,
-      controller: controller.name,
-    };
-  });
+  return allEvents;
 }
 
 // Fetch doors from a specific controller

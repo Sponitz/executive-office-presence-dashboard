@@ -37,6 +37,14 @@ export async function getUserByEntraId(entraId: string): Promise<User | null> {
   return result.rows[0] || null;
 }
 
+export async function getUserByDisplayName(displayName: string): Promise<User | null> {
+  const result = await pool.query(
+    'SELECT * FROM users WHERE LOWER(display_name) = LOWER($1)',
+    [displayName]
+  );
+  return result.rows[0] || null;
+}
+
 export async function upsertUser(user: Omit<User, 'id'>): Promise<User> {
   const result = await pool.query(
     `INSERT INTO users (entra_id, email, display_name, department, job_title)

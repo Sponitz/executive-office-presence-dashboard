@@ -56,6 +56,7 @@ export interface UnifiAccessEvent {
   event_type: string;
   timestamp: string;
   result: string;
+  controller?: string;
 }
 
 export interface EzradiusAuthEvent {
