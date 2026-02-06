@@ -34,9 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true' ||
-    !import.meta.env.VITE_AZURE_CLIENT_ID ||
-    import.meta.env.VITE_AZURE_CLIENT_ID === 'YOUR_CLIENT_ID';
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
 
   const fetchUserProfile = useCallback(async () => {
     if (isDemoMode) {
