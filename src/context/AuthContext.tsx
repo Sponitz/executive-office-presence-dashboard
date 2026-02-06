@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { InteractionStatus } from '@azure/msal-browser';
 import type { AuthenticatedUser, UserRole } from '@/types';
-import { loginRequest, graphConfig, roleMapping } from '@/config/msal';
+import { loginRequest, graphConfig, groupIds } from '@/config/msal';
 
 interface AuthContextType {
   user: AuthenticatedUser | null;
@@ -69,17 +69,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await profileResponse.json();
       const groups = await groupsResponse.json();
 
+      const securityGroupIds = groups.value
+        ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
+        .map((g: { id: string }) => g.id) || [];
+
       const securityGroups = groups.value
         ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
         .map((g: { displayName: string }) => g.displayName) || [];
 
       let role: UserRole = 'viewer';
-      for (const [groupName, mappedRole] of Object.entries(roleMapping)) {
-        if (securityGroups.includes(groupName)) {
-          if (mappedRole === 'executive' || (mappedRole === 'manager' && role !== 'executive')) {
-            role = mappedRole;
-          }
-        }
+      if (securityGroupIds.includes(groupIds.executives)) {
+        role = 'executive';
+      } else if (securityGroupIds.includes(groupIds.managers)) {
+        role = 'manager';
+      } else if (securityGroupIds.includes(groupIds.viewers)) {
+        role = 'viewer';
       }
 
       setUser({
