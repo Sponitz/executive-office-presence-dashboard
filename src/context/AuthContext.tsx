@@ -67,6 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await profileResponse.json();
       const groups = await groupsResponse.json();
 
+      console.log('Graph API memberOf response:', groups);
+      console.log('Expected executive group ID:', groupIds.executives);
+
       const securityGroupIds = groups.value
         ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
         .map((g: { id: string }) => g.id) || [];
@@ -75,14 +78,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
         .map((g: { displayName: string }) => g.displayName) || [];
 
+      console.log('User security group IDs:', securityGroupIds);
+      console.log('User security group names:', securityGroups);
+
       let role: UserRole = 'viewer';
       if (securityGroupIds.includes(groupIds.executives)) {
         role = 'executive';
+        console.log('Matched executive group');
       } else if (securityGroupIds.includes(groupIds.managers)) {
         role = 'manager';
+        console.log('Matched manager group');
       } else if (securityGroupIds.includes(groupIds.viewers)) {
         role = 'viewer';
+        console.log('Matched viewer group');
+      } else {
+        console.log('No matching group found, defaulting to viewer');
       }
+      console.log('Assigned role:', role);
 
       setUser({
         id: profile.id,

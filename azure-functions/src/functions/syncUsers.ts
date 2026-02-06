@@ -15,7 +15,14 @@ interface GraphUser {
   companyName?: string;
   officeLocation?: string;
   employeeId?: string;
+  employeeType?: string;
+  accountEnabled?: boolean;
   userPrincipalName: string;
+  manager?: {
+    id: string;
+    displayName: string;
+    mail: string;
+  };
 }
 
 interface GraphResponse {
@@ -48,7 +55,7 @@ async function getAccessToken(): Promise<string> {
 
 async function getGroupMembers(accessToken: string, groupId: string): Promise<GraphUser[]> {
   const users: GraphUser[] = [];
-  let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,mail,department,jobTitle,companyName,officeLocation,employeeId,userPrincipalName`;
+  let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,mail,department,jobTitle,companyName,officeLocation,employeeId,employeeType,accountEnabled,userPrincipalName`;
 
   while (url) {
     const response = await fetch(url, {
@@ -66,6 +73,20 @@ async function getGroupMembers(accessToken: string, groupId: string): Promise<Gr
   }
 
   return users;
+}
+
+async function getUserManager(accessToken: string, userId: string): Promise<{ displayName: string; mail: string } | null> {
+  try {
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/manager?$select=displayName,mail`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return { displayName: data.displayName, mail: data.mail };
+  } catch {
+    return null;
+  }
 }
 
 async function syncUsersFromGraph(context: InvocationContext): Promise<{ synced: number; errors: string[] }> {
@@ -93,29 +114,53 @@ async function syncUsersFromGraph(context: InvocationContext): Promise<{ synced:
 
   context.log(`Found ${allUsers.size} unique users across all groups`);
 
-  for (const user of allUsers.values()) {
-    try {
-      await pool.query(
-        `INSERT INTO users (entra_id, email, display_name, department, job_title)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (entra_id) DO UPDATE SET
-           email = EXCLUDED.email,
-           display_name = EXCLUDED.display_name,
-           department = EXCLUDED.department,
-           job_title = EXCLUDED.job_title,
-           updated_at = CURRENT_TIMESTAMP`,
-        [
-          user.id,
-          (user.mail || user.userPrincipalName).toLowerCase(),
-          user.displayName,
-          user.department || null,
-          user.jobTitle || null,
-        ]
-      );
-      synced++;
-    } catch (error) {
-      errors.push(`Failed to sync user ${user.displayName}: ${error}`);
+  const usersArray = Array.from(allUsers.values());
+  
+  // Fetch manager info in batches to avoid rate limiting
+  for (let i = 0; i < usersArray.length; i += 50) {
+    const batch = usersArray.slice(i, i + 50);
+    const managerPromises = batch.map(user => getUserManager(accessToken, user.id));
+    const managers = await Promise.all(managerPromises);
+    
+    for (let j = 0; j < batch.length; j++) {
+      const user = batch[j];
+      const manager = managers[j];
+      
+      try {
+        await pool.query(
+          `INSERT INTO users (entra_id, email, display_name, department, job_title, office_location, manager_name, manager_email, employee_type, account_enabled)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (entra_id) DO UPDATE SET
+             email = EXCLUDED.email,
+             display_name = EXCLUDED.display_name,
+             department = EXCLUDED.department,
+             job_title = EXCLUDED.job_title,
+             office_location = EXCLUDED.office_location,
+             manager_name = EXCLUDED.manager_name,
+             manager_email = EXCLUDED.manager_email,
+             employee_type = EXCLUDED.employee_type,
+             account_enabled = EXCLUDED.account_enabled,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            user.id,
+            (user.mail || user.userPrincipalName).toLowerCase(),
+            user.displayName,
+            user.department || null,
+            user.jobTitle || null,
+            user.officeLocation || null,
+            manager?.displayName || null,
+            manager?.mail || null,
+            user.employeeType || null,
+            user.accountEnabled !== false,
+          ]
+        );
+        synced++;
+      } catch (error) {
+        errors.push(`Failed to sync user ${user.displayName}: ${error}`);
+      }
     }
+    
+    context.log(`Synced batch ${Math.floor(i / 50) + 1} of ${Math.ceil(usersArray.length / 50)}`);
   }
 
   return { synced, errors };

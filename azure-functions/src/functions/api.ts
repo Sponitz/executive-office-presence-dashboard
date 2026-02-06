@@ -6,6 +6,12 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 async function getStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const currentOccupancy = await pool.query(`
@@ -58,6 +64,7 @@ async function getStats(request: HttpRequest, context: InvocationContext): Promi
 
     return {
       status: 200,
+      headers: corsHeaders,
       jsonBody: {
         currentOccupancy: parseInt(currentOccupancy.rows[0].current_occupancy) || 0,
         totalCapacity: parseInt(currentOccupancy.rows[0].total_capacity) || 0,
@@ -69,7 +76,7 @@ async function getStats(request: HttpRequest, context: InvocationContext): Promi
     };
   } catch (error) {
     context.error('Failed to get stats:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -96,10 +103,10 @@ async function getAttendance(request: HttpRequest, context: InvocationContext): 
 
     const result = await pool.query(query, params);
 
-    return { status: 200, jsonBody: result.rows };
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
   } catch (error) {
     context.error('Failed to get attendance:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -127,10 +134,10 @@ async function getHourlyOccupancy(request: HttpRequest, context: InvocationConte
 
     const result = await pool.query(query, params);
 
-    return { status: 200, jsonBody: result.rows };
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
   } catch (error) {
     context.error('Failed to get hourly occupancy:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -144,10 +151,10 @@ async function getOffices(request: HttpRequest, context: InvocationContext): Pro
       ORDER BY o.name
     `);
 
-    return { status: 200, jsonBody: result.rows };
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
   } catch (error) {
     context.error('Failed to get offices:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -159,10 +166,10 @@ async function getUserPresence(request: HttpRequest, context: InvocationContext)
       LIMIT 100
     `);
 
-    return { status: 200, jsonBody: result.rows };
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
   } catch (error) {
     context.error('Failed to get user presence:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -194,6 +201,7 @@ async function getUsers(request: HttpRequest, context: InvocationContext): Promi
 
     return { 
       status: 200, 
+      headers: corsHeaders,
       jsonBody: {
         users: result.rows,
         total: parseInt(countResult.rows[0].total),
@@ -203,7 +211,7 @@ async function getUsers(request: HttpRequest, context: InvocationContext): Promi
     };
   } catch (error) {
     context.error('Failed to get users:', error);
-    return { status: 500, jsonBody: { error: 'Internal server error' } };
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
   }
 }
 
@@ -247,4 +255,252 @@ app.http('getUsers', {
   authLevel: 'anonymous',
   route: 'users',
   handler: getUsers,
+});
+
+async function getUserById(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+    if (!userId) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'User ID required' } };
+    }
+
+    const result = await pool.query(`
+      SELECT id, entra_id, email, display_name, department, job_title, 
+             office_location, manager_name, manager_email, employee_type,
+             account_enabled, created_at
+      FROM users WHERE id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      return { status: 404, headers: corsHeaders, jsonBody: { error: 'User not found' } };
+    }
+
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows[0] };
+  } catch (error) {
+    context.error('Failed to get user:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getUserSessions(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+    const limit = parseInt(request.query.get('limit') || '20');
+
+    const result = await pool.query(`
+      SELECT ps.id, o.name as office_name, ps.entry_time, ps.exit_time, ps.duration_minutes
+      FROM presence_sessions ps
+      JOIN offices o ON ps.office_id = o.id
+      WHERE ps.user_id = $1
+      ORDER BY ps.entry_time DESC
+      LIMIT $2
+    `, [userId, limit]);
+
+    return { status: 200, headers: corsHeaders, jsonBody: { sessions: result.rows } };
+  } catch (error) {
+    context.error('Failed to get user sessions:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getUserStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total_visits,
+        COALESCE(SUM(duration_minutes) / 60.0, 0) as total_hours,
+        COALESCE(AVG(duration_minutes), 0) as avg_duration_minutes,
+        MAX(entry_time) as last_visit
+      FROM presence_sessions
+      WHERE user_id = $1
+    `, [userId]);
+
+    const mostVisited = await pool.query(`
+      SELECT o.name, COUNT(*) as visit_count
+      FROM presence_sessions ps
+      JOIN offices o ON ps.office_id = o.id
+      WHERE ps.user_id = $1
+      GROUP BY o.name
+      ORDER BY visit_count DESC
+      LIMIT 1
+    `, [userId]);
+
+    return { 
+      status: 200, 
+      headers: corsHeaders, 
+      jsonBody: {
+        total_visits: parseInt(result.rows[0].total_visits) || 0,
+        total_hours: parseFloat(result.rows[0].total_hours) || 0,
+        avg_duration_minutes: Math.round(parseFloat(result.rows[0].avg_duration_minutes) || 0),
+        last_visit: result.rows[0].last_visit,
+        most_visited_office: mostVisited.rows[0]?.name || null,
+      }
+    };
+  } catch (error) {
+    context.error('Failed to get user stats:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeById(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    if (!officeId) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Office ID required' } };
+    }
+
+    const result = await pool.query(`
+      SELECT id, name, location, capacity, timezone, is_active
+      FROM offices WHERE id = $1
+    `, [officeId]);
+
+    if (result.rows.length === 0) {
+      return { status: 404, headers: corsHeaders, jsonBody: { error: 'Office not found' } };
+    }
+
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows[0] };
+  } catch (error) {
+    context.error('Failed to get office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeDailyStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    const days = parseInt(request.query.get('days') || '30');
+
+    const result = await pool.query(`
+      SELECT date, unique_visitors, total_entries, 
+             COALESCE(avg_duration_minutes, 0) as avg_duration_minutes,
+             peak_occupancy
+      FROM daily_attendance
+      WHERE office_id = $1 AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
+      ORDER BY date DESC
+    `, [officeId, days]);
+
+    return { status: 200, headers: corsHeaders, jsonBody: { stats: result.rows } };
+  } catch (error) {
+    context.error('Failed to get office daily stats:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeHourlyStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+
+    const result = await pool.query(`
+      SELECT hour, AVG(average_occupancy) as avg_occupancy
+      FROM hourly_occupancy
+      WHERE office_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY hour
+      ORDER BY hour
+    `, [officeId]);
+
+    return { status: 200, headers: corsHeaders, jsonBody: { stats: result.rows } };
+  } catch (error) {
+    context.error('Failed to get office hourly stats:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeTopVisitors(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    const limit = parseInt(request.query.get('limit') || '10');
+
+    const result = await pool.query(`
+      SELECT u.id as user_id, u.display_name, u.email,
+             COUNT(*) as visit_count,
+             COALESCE(SUM(ps.duration_minutes) / 60.0, 0) as total_hours
+      FROM presence_sessions ps
+      JOIN users u ON ps.user_id = u.id
+      WHERE ps.office_id = $1 AND ps.entry_time >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY u.id, u.display_name, u.email
+      ORDER BY visit_count DESC
+      LIMIT $2
+    `, [officeId, limit]);
+
+    return { status: 200, headers: corsHeaders, jsonBody: { visitors: result.rows } };
+  } catch (error) {
+    context.error('Failed to get office top visitors:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeOccupancy(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+
+    const result = await pool.query(`
+      SELECT COUNT(DISTINCT user_id) as current
+      FROM presence_sessions
+      WHERE office_id = $1 AND exit_time IS NULL 
+        AND entry_time > CURRENT_TIMESTAMP - INTERVAL '12 hours'
+    `, [officeId]);
+
+    return { status: 200, headers: corsHeaders, jsonBody: { current: parseInt(result.rows[0].current) || 0 } };
+  } catch (error) {
+    context.error('Failed to get office occupancy:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('getUserById', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}',
+  handler: getUserById,
+});
+
+app.http('getUserSessions', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}/sessions',
+  handler: getUserSessions,
+});
+
+app.http('getUserStats', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}/stats',
+  handler: getUserStats,
+});
+
+app.http('getOfficeById', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}',
+  handler: getOfficeById,
+});
+
+app.http('getOfficeDailyStats', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/daily',
+  handler: getOfficeDailyStats,
+});
+
+app.http('getOfficeHourlyStats', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/hourly',
+  handler: getOfficeHourlyStats,
+});
+
+app.http('getOfficeTopVisitors', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/top-visitors',
+  handler: getOfficeTopVisitors,
+});
+
+app.http('getOfficeOccupancy', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/occupancy',
+  handler: getOfficeOccupancy,
 });

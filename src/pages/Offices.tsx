@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapPin, Users, Clock, TrendingUp } from 'lucide-react';
 import { mockOffices, generateDailyAttendance, getOfficeComparisonData } from '@/utils/mockData';
 
 export function Offices() {
+  const navigate = useNavigate();
   const dailyAttendance = useMemo(() => generateDailyAttendance(30), []);
   const officeComparison = useMemo(() => getOfficeComparisonData(), []);
 
@@ -48,7 +50,8 @@ export function Offices() {
         {officeStats.map((office) => (
           <div
             key={office.id}
-            className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow"
+            className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+            onClick={() => navigate(`/offices/${office.id}`)}
           >
             {/* Header with gradient */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
@@ -191,7 +194,11 @@ export function Offices() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {officeStats.map((office) => (
-                <tr key={office.id} className="hover:bg-slate-50">
+                <tr
+                  key={office.id}
+                  className="hover:bg-slate-50 cursor-pointer"
+                  onClick={() => navigate(`/offices/${office.id}`)}
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                     {office.name}
                   </td>

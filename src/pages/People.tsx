@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Search, Download, Building2, Briefcase } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Download, Building2, Briefcase, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const API_BASE_URL = 'https://improving-pulse-functions.azurewebsites.net/api';
@@ -22,13 +23,35 @@ interface UsersResponse {
 }
 
 export function People() {
+  const navigate = useNavigate();
   const { canViewUserDetails } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
   const limit = 50;
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(0);
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchUsers() {
@@ -38,8 +61,8 @@ export function People() {
           limit: limit.toString(),
           offset: (page * limit).toString(),
         });
-        if (search) {
-          params.set('search', search);
+        if (debouncedSearch) {
+          params.set('search', debouncedSearch);
         }
         const response = await fetch(`${API_BASE_URL}/users?${params}`);
         const data: UsersResponse = await response.json();
@@ -52,7 +75,7 @@ export function People() {
       }
     }
     fetchUsers();
-  }, [page, search]);
+  }, [page, debouncedSearch]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -92,11 +115,8 @@ export function People() {
           <input
             type="text"
             placeholder="Search by name, email, or department..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -135,11 +155,16 @@ export function People() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
                       Job Title
                     </th>
+                    <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-50">
+                    <tr
+                      key={user.id}
+                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/people/${user.id}`)}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-[#005596]/10 flex items-center justify-center">
@@ -168,6 +193,9 @@ export function People() {
                           <Briefcase className="h-4 w-4 text-slate-400" />
                           {user.job_title || '-'}
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <ChevronRight className="h-5 w-5 text-slate-400" />
                       </td>
                     </tr>
                   ))}
