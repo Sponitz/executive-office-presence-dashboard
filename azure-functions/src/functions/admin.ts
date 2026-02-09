@@ -142,3 +142,58 @@ app.http('adminCreateOffice', {
   route: 'manage/offices',
   handler: createOffice,
 });
+
+async function reassignEvents(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const body = await request.json() as { old_office_id: string; new_office_id: string };
+    if (!body.old_office_id || !body.new_office_id) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'old_office_id and new_office_id required' } };
+    }
+    const eventsResult = await pool.query(
+      'UPDATE access_events SET office_id = $2 WHERE office_id = $1',
+      [body.old_office_id, body.new_office_id]
+    );
+    const sessionsResult = await pool.query(
+      'UPDATE presence_sessions SET office_id = $2 WHERE office_id = $1',
+      [body.old_office_id, body.new_office_id]
+    );
+    return { status: 200, headers: corsHeaders, jsonBody: { 
+      message: 'Events reassigned',
+      events_updated: eventsResult.rowCount,
+      sessions_updated: sessionsResult.rowCount
+    }};
+  } catch (error) {
+    context.error('Failed to reassign events:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('adminReassignEvents', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'manage/reassign-events',
+  handler: reassignEvents,
+});
+
+async function debugEventOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const result = await pool.query(`
+      SELECT ae.office_id, o.name as office_name, COUNT(*) as event_count
+      FROM access_events ae
+      LEFT JOIN offices o ON ae.office_id = o.id
+      GROUP BY ae.office_id, o.name
+      ORDER BY event_count DESC
+    `);
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
+  } catch (error) {
+    context.error('Debug query failed:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('debugEventOffices', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'manage/debug/events',
+  handler: debugEventOffices,
+});
