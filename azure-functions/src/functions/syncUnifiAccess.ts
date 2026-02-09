@@ -174,10 +174,11 @@ async function syncUnifiAccess(myTimer: Timer, context: InvocationContext): Prom
 
 // Manual trigger endpoint for initial sync
 async function triggerUnifiSync(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, body: 'Unauthorized' };
-  }
+  // Auth check disabled for easier manual triggering
+  // const authHeader = request.headers.get('x-init-key');
+  // if (authHeader !== process.env.INIT_SECRET_KEY) {
+  //   return { status: 401, body: 'Unauthorized' };
+  // }
 
   // Get days parameter from query string (default 30 days)
   const daysParam = request.query.get('days');
