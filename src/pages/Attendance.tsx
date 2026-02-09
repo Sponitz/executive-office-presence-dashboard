@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { subDays, format, parseISO } from 'date-fns';
 import {
   AreaChart,
@@ -11,20 +11,43 @@ import {
   Legend,
 } from 'recharts';
 import { OfficeSelector, DateRangePicker } from '@/components';
-import { mockOffices, generateDailyAttendance } from '@/utils/mockData';
+import { getOffices, getAttendance, type Office, type DailyAttendance } from '@/services/api';
 
 export function Attendance() {
-  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>(
-    mockOffices.map((o) => o.id)
-  );
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState({
     start: subDays(new Date(), 29),
     end: new Date(),
   });
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [dailyAttendance, setDailyAttendance] = useState<DailyAttendance[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const dailyAttendance = useMemo(() => generateDailyAttendance(30), []);
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [officesData, attendanceData] = await Promise.all([
+          getOffices(),
+          getAttendance(
+            format(dateRange.start, 'yyyy-MM-dd'),
+            format(dateRange.end, 'yyyy-MM-dd')
+          ),
+        ]);
+        setOffices(officesData);
+        setSelectedOfficeIds(officesData.map((o) => o.id));
+        setDailyAttendance(attendanceData);
+      } catch (error) {
+        console.error('Failed to fetch attendance data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  const chartData = useMemo(() => {
+    fetchData();
+  }, [dateRange]);
+
+  const chartData = (() => {
     const dateMap: Record<string, { date: string; total: number; [key: string]: string | number }> = {};
 
     for (const record of dailyAttendance) {
@@ -35,7 +58,7 @@ export function Attendance() {
         dateMap[dateStr] = { date: dateStr, total: 0 };
       }
 
-      const office = mockOffices.find((o) => o.id === record.officeId);
+      const office = offices.find((o) => o.id === record.officeId);
       if (office) {
         dateMap[dateStr][office.name] = record.uniqueVisitors;
         dateMap[dateStr].total += record.uniqueVisitors;
@@ -43,26 +66,35 @@ export function Attendance() {
     }
 
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
-  }, [dailyAttendance, selectedOfficeIds]);
+  })();
 
   const colors = ['#005596', '#5BC2A7', '#F5BB41', '#9D1D96', '#4597D3', '#A7A8A9'];
 
-  const selectedOffices = mockOffices.filter((o) => selectedOfficeIds.includes(o.id));
+  const selectedOffices = offices.filter((o) => selectedOfficeIds.includes(o.id));
 
-  const summaryStats = useMemo(() => {
+  const summaryStats = (() => {
     const filtered = dailyAttendance.filter((d) => selectedOfficeIds.includes(d.officeId));
     const totalVisitors = filtered.reduce((sum, d) => sum + d.uniqueVisitors, 0);
-    const avgDaily = Math.round(totalVisitors / 30);
+    const daysCount = new Set(filtered.map(d => d.date)).size || 1;
+    const avgDaily = Math.round(totalVisitors / daysCount);
     const peakDay = filtered.reduce(
       (max, d) => (d.uniqueVisitors > max.visitors ? { date: d.date, visitors: d.uniqueVisitors } : max),
       { date: '', visitors: 0 }
     );
-    const avgDuration = Math.round(
-      filtered.reduce((sum, d) => sum + d.averageDurationMinutes, 0) / filtered.length
-    );
+    const avgDuration = filtered.length > 0 
+      ? Math.round(filtered.reduce((sum, d) => sum + d.averageDurationMinutes, 0) / filtered.length)
+      : 0;
 
     return { totalVisitors, avgDaily, peakDay, avgDuration };
-  }, [dailyAttendance, selectedOfficeIds]);
+  })();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#005596]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -74,7 +106,7 @@ export function Attendance() {
         </div>
         <div className="flex flex-wrap gap-3">
           <OfficeSelector
-            offices={mockOffices}
+            offices={offices}
             selectedOfficeIds={selectedOfficeIds}
             onChange={setSelectedOfficeIds}
           />

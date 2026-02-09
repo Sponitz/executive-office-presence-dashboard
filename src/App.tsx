@@ -1,12 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MsalProvider } from '@azure/msal-react';
-import { PublicClientApplication } from '@azure/msal-browser';
+import { PublicClientApplication, EventType } from '@azure/msal-browser';
 import { msalConfig } from '@/config/msal';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { Layout } from '@/components';
-import { Dashboard, Attendance, People, Offices, Settings, Login } from '@/pages';
+import { Dashboard, Attendance, People, UserDetail, Offices, OfficeDetail, Settings, Login } from '@/pages';
 
 const msalInstance = new PublicClientApplication(msalConfig);
+
+msalInstance.initialize().then(() => {
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    msalInstance.setActiveAccount(accounts[0]);
+  }
+
+  msalInstance.addEventCallback((event) => {
+    if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
+      const payload = event.payload as { account: { username: string } };
+      const account = payload.account;
+      msalInstance.setActiveAccount(account as ReturnType<typeof msalInstance.getActiveAccount>);
+    }
+  });
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -86,10 +101,28 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/people/:userId"
+        element={
+          <ProtectedRoute>
+            <ManagerRoute>
+              <UserDetail />
+            </ManagerRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/offices"
         element={
           <ProtectedRoute>
             <Offices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/offices/:officeId"
+        element={
+          <ProtectedRoute>
+            <OfficeDetail />
           </ProtectedRoute>
         }
       />

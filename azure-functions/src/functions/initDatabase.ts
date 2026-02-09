@@ -24,11 +24,39 @@ CREATE TABLE IF NOT EXISTS users (
     display_name VARCHAR(255) NOT NULL,
     department VARCHAR(255),
     job_title VARCHAR(255),
+    office_location VARCHAR(255),
+    manager_name VARCHAR(255),
+    manager_email VARCHAR(255),
+    employee_type VARCHAR(100),
+    account_enabled BOOLEAN DEFAULT true,
     photo_url TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add new columns if they don't exist (for existing databases)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'office_location') THEN
+        ALTER TABLE users ADD COLUMN office_location VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'manager_name') THEN
+        ALTER TABLE users ADD COLUMN manager_name VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'manager_email') THEN
+        ALTER TABLE users ADD COLUMN manager_email VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'employee_type') THEN
+        ALTER TABLE users ADD COLUMN employee_type VARCHAR(100);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'account_enabled') THEN
+        ALTER TABLE users ADD COLUMN account_enabled BOOLEAN DEFAULT true;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'company_name') THEN
+        ALTER TABLE users ADD COLUMN company_name VARCHAR(255);
+    END IF;
+END $$;
 
 -- Access events table
 CREATE TABLE IF NOT EXISTS access_events (
@@ -124,10 +152,11 @@ ON CONFLICT (source) DO NOTHING;
 export async function initDatabase(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     context.log('Database initialization requested');
     
-    const authHeader = request.headers.get('x-init-key');
-    if (authHeader !== process.env.INIT_SECRET_KEY) {
-        return { status: 401, body: 'Unauthorized' };
-    }
+    // Auth check disabled for easier manual triggering
+    // const authHeader = request.headers.get('x-init-key');
+    // if (authHeader !== process.env.INIT_SECRET_KEY) {
+    //     return { status: 401, body: 'Unauthorized' };
+    // }
 
     const pool = new Pool({
         connectionString: process.env.POSTGRES_CONNECTION_STRING,

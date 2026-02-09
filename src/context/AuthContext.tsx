@@ -55,34 +55,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         account: accounts[0],
       });
 
-      const [profileResponse, groupsResponse] = await Promise.all([
-        fetch(graphConfig.graphMeEndpoint, {
-          headers: { Authorization: `Bearer ${response.accessToken}` },
-        }),
-        fetch(graphConfig.graphMemberOfEndpoint, {
-          headers: { Authorization: `Bearer ${response.accessToken}` },
-        }),
-      ]);
-
+      const profileResponse = await fetch(graphConfig.graphMeEndpoint, {
+        headers: { Authorization: `Bearer ${response.accessToken}` },
+      });
       const profile = await profileResponse.json();
-      const groups = await groupsResponse.json();
 
-      const securityGroupIds = groups.value
-        ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
-        .map((g: { id: string }) => g.id) || [];
+      // Paginate through all groups (Graph API returns max 100 per page)
+      interface GraphGroup {
+        id: string;
+        displayName: string;
+        '@odata.type': string;
+      }
+      interface GraphMemberOfResponse {
+        value?: GraphGroup[];
+        '@odata.nextLink'?: string;
+      }
+      
+      let allGroups: GraphGroup[] = [];
+      let nextLink: string | null = graphConfig.graphMemberOfEndpoint;
+      
+      while (nextLink) {
+        const groupsRes = await fetch(nextLink, {
+          headers: { Authorization: `Bearer ${response.accessToken}` },
+        });
+        const groupsData: GraphMemberOfResponse = await groupsRes.json();
+        
+        if (groupsData.value) {
+          allGroups = [...allGroups, ...groupsData.value];
+        }
+        
+        nextLink = groupsData['@odata.nextLink'] || null;
+      }
 
-      const securityGroups = groups.value
-        ?.filter((g: { '@odata.type': string }) => g['@odata.type'] === '#microsoft.graph.group')
-        .map((g: { displayName: string }) => g.displayName) || [];
+      console.log('Total groups fetched:', allGroups.length);
+      console.log('Expected executive group ID:', groupIds.executives);
+
+      const securityGroupIds = allGroups
+        .filter((g) => g['@odata.type'] === '#microsoft.graph.group')
+        .map((g) => g.id);
+
+      const securityGroups = allGroups
+        .filter((g) => g['@odata.type'] === '#microsoft.graph.group')
+        .map((g) => g.displayName);
+
+      console.log('User security group IDs:', securityGroupIds);
+      console.log('User security group names:', securityGroups);
 
       let role: UserRole = 'viewer';
       if (securityGroupIds.includes(groupIds.executives)) {
         role = 'executive';
+        console.log('Matched executive group');
       } else if (securityGroupIds.includes(groupIds.managers)) {
         role = 'manager';
+        console.log('Matched manager group');
       } else if (securityGroupIds.includes(groupIds.viewers)) {
         role = 'viewer';
+        console.log('Matched viewer group');
+      } else {
+        console.log('No matching group found, defaulting to viewer');
       }
+      console.log('Assigned role:', role);
 
       setUser({
         id: profile.id,

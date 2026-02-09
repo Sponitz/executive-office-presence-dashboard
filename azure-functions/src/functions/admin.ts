@@ -1,0 +1,199 @@
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-init-key',
+};
+
+async function getAllOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, location, capacity, timezone, is_active
+      FROM offices
+      ORDER BY name
+    `);
+
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
+  } catch (error) {
+    context.error('Failed to get all offices:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function updateOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  if (request.method === 'OPTIONS') {
+    return { status: 204, headers: corsHeaders };
+  }
+  try {
+    const officeId = request.params.officeId;
+    const body = await request.json() as { name?: string; location?: string; capacity?: number; timezone?: string; is_active?: boolean };
+    
+    const updates: string[] = [];
+    const values: (string | number | boolean)[] = [];
+    let paramIndex = 1;
+
+    if (body.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(body.name);
+    }
+    if (body.location !== undefined) {
+      updates.push(`location = $${paramIndex++}`);
+      values.push(body.location);
+    }
+    if (body.capacity !== undefined) {
+      updates.push(`capacity = $${paramIndex++}`);
+      values.push(body.capacity);
+    }
+    if (body.timezone !== undefined) {
+      updates.push(`timezone = $${paramIndex++}`);
+      values.push(body.timezone);
+    }
+    if (body.is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      values.push(body.is_active);
+    }
+
+    if (updates.length === 0) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'No fields to update' } };
+    }
+
+    values.push(officeId);
+    await pool.query(`UPDATE offices SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+    
+    return { status: 200, headers: corsHeaders, jsonBody: { message: 'Office updated' } };
+  } catch (error) {
+    context.error('Failed to update office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function createOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const body = await request.json() as { name: string; location: string; capacity?: number; timezone?: string };
+    
+    if (!body.name || !body.location) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Name and location required' } };
+    }
+
+    const result = await pool.query(`
+      INSERT INTO offices (name, location, capacity, timezone, is_active)
+      VALUES ($1, $2, $3, $4, true)
+      RETURNING id
+    `, [body.name, body.location, body.capacity || 50, body.timezone || 'America/Chicago']);
+    
+    return { status: 201, headers: corsHeaders, jsonBody: { id: result.rows[0].id, message: 'Office created' } };
+  } catch (error) {
+    context.error('Failed to create office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function deleteOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  if (request.method === 'OPTIONS') {
+    return { status: 204, headers: corsHeaders };
+  }
+  try {
+    const officeId = request.params.officeId;
+    if (!officeId) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Office ID required' } };
+    }
+
+    await pool.query('DELETE FROM access_events WHERE office_id = $1', [officeId]);
+    await pool.query('DELETE FROM presence_sessions WHERE office_id = $1', [officeId]);
+    await pool.query('DELETE FROM offices WHERE id = $1', [officeId]);
+    return { status: 200, headers: corsHeaders, jsonBody: { message: 'Office deleted' } };
+  } catch (error) {
+    context.error('Failed to delete office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('adminDeleteOffice', {
+  methods: ['DELETE', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'manage/office/{officeId}',
+  handler: deleteOffice,
+});
+
+app.http('adminGetAllOffices', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'manage/offices',
+  handler: getAllOffices,
+});
+
+app.http('adminUpdateOffice', {
+  methods: ['PUT', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'manage/office/{officeId}',
+  handler: updateOffice,
+});
+
+app.http('adminCreateOffice', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'manage/offices',
+  handler: createOffice,
+});
+
+async function reassignEvents(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const body = await request.json() as { old_office_id: string; new_office_id: string };
+    if (!body.old_office_id || !body.new_office_id) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'old_office_id and new_office_id required' } };
+    }
+    const eventsResult = await pool.query(
+      'UPDATE access_events SET office_id = $2 WHERE office_id = $1',
+      [body.old_office_id, body.new_office_id]
+    );
+    const sessionsResult = await pool.query(
+      'UPDATE presence_sessions SET office_id = $2 WHERE office_id = $1',
+      [body.old_office_id, body.new_office_id]
+    );
+    return { status: 200, headers: corsHeaders, jsonBody: { 
+      message: 'Events reassigned',
+      events_updated: eventsResult.rowCount,
+      sessions_updated: sessionsResult.rowCount
+    }};
+  } catch (error) {
+    context.error('Failed to reassign events:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('adminReassignEvents', {
+  methods: ['POST'],
+  authLevel: 'anonymous',
+  route: 'manage/reassign-events',
+  handler: reassignEvents,
+});
+
+async function debugEventOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const result = await pool.query(`
+      SELECT ae.office_id, o.name as office_name, COUNT(*) as event_count
+      FROM access_events ae
+      LEFT JOIN offices o ON ae.office_id = o.id
+      GROUP BY ae.office_id, o.name
+      ORDER BY event_count DESC
+    `);
+    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
+  } catch (error) {
+    context.error('Debug query failed:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('debugEventOffices', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'manage/debug/events',
+  handler: debugEventOffices,
+});
