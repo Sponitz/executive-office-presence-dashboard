@@ -8,8 +8,8 @@ const pool = new Pool({
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-init-key',
 };
 
 async function getStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -84,19 +84,26 @@ async function getAttendance(request: HttpRequest, context: InvocationContext): 
     const endDate = request.query.get('endDate') || new Date().toISOString().split('T')[0];
 
     let query = `
-      SELECT da.*, o.name as office_name
-      FROM daily_attendance da
-      JOIN offices o ON da.office_id = o.id
-      WHERE da.date >= $1 AND da.date <= $2
+      SELECT 
+        DATE(ae.timestamp)::text as date,
+        ae.office_id as "officeId",
+        o.name as office_name,
+        COUNT(DISTINCT ae.user_id) as "uniqueVisitors",
+        COUNT(*) as "totalEntries",
+        0 as "averageDurationMinutes",
+        COUNT(DISTINCT ae.user_id) as "peakOccupancy"
+      FROM access_events ae
+      JOIN offices o ON ae.office_id = o.id
+      WHERE DATE(ae.timestamp) >= $1::date AND DATE(ae.timestamp) <= $2::date
     `;
     const params: (string | null)[] = [startDate, endDate];
 
     if (officeId) {
-      query += ' AND da.office_id = $3';
+      query += ' AND ae.office_id = $3';
       params.push(officeId);
     }
 
-    query += ' ORDER BY da.date, o.name';
+    query += ' GROUP BY DATE(ae.timestamp), ae.office_id, o.name ORDER BY date, o.name';
 
     const result = await pool.query(query, params);
 
@@ -403,11 +410,15 @@ async function getOfficeDailyStats(request: HttpRequest, context: InvocationCont
     const days = parseInt(request.query.get('days') || '30');
 
     const result = await pool.query(`
-      SELECT date, unique_visitors, total_entries, 
-             COALESCE(avg_duration_minutes, 0) as avg_duration_minutes,
-             peak_occupancy
-      FROM daily_attendance
-      WHERE office_id = $1 AND date >= CURRENT_DATE - INTERVAL '1 day' * $2
+      SELECT 
+        DATE(timestamp)::text as date,
+        COUNT(DISTINCT user_id) as unique_visitors,
+        COUNT(*) as total_entries,
+        0 as avg_duration_minutes,
+        COUNT(DISTINCT user_id) as peak_occupancy
+      FROM access_events
+      WHERE office_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '1 day' * $2
+      GROUP BY DATE(timestamp)
       ORDER BY date DESC
     `, [officeId, days]);
 
@@ -423,10 +434,12 @@ async function getOfficeHourlyStats(request: HttpRequest, context: InvocationCon
     const officeId = request.params.officeId;
 
     const result = await pool.query(`
-      SELECT hour, AVG(average_occupancy) as avg_occupancy
-      FROM hourly_occupancy
-      WHERE office_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'
-      GROUP BY hour
+      SELECT 
+        EXTRACT(HOUR FROM timestamp)::int as hour,
+        COUNT(DISTINCT user_id) as avg_occupancy
+      FROM access_events
+      WHERE office_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY EXTRACT(HOUR FROM timestamp)
       ORDER BY hour
     `, [officeId]);
 
@@ -444,11 +457,11 @@ async function getOfficeTopVisitors(request: HttpRequest, context: InvocationCon
 
     const result = await pool.query(`
       SELECT u.id as user_id, u.display_name, u.email,
-             COUNT(*) as visit_count,
-             COALESCE(SUM(ps.duration_minutes) / 60.0, 0) as total_hours
-      FROM presence_sessions ps
-      JOIN users u ON ps.user_id = u.id
-      WHERE ps.office_id = $1 AND ps.entry_time >= CURRENT_DATE - INTERVAL '30 days'
+             COUNT(DISTINCT DATE(ae.timestamp)) as visit_count,
+             0 as total_hours
+      FROM access_events ae
+      JOIN users u ON ae.user_id = u.id
+      WHERE ae.office_id = $1 AND ae.timestamp >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY u.id, u.display_name, u.email
       ORDER BY visit_count DESC
       LIMIT $2
@@ -537,11 +550,6 @@ app.http('getOfficeOccupancy', {
 
 // Admin endpoint to deactivate an office
 async function deactivateOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, headers: corsHeaders, body: 'Unauthorized' };
-  }
-
   try {
     const officeId = request.params.officeId;
     if (!officeId) {
@@ -588,121 +596,4 @@ app.http('getWeeklyTrends', {
   authLevel: 'anonymous',
   route: 'weekly-trends',
   handler: getWeeklyTrends,
-});
-
-// Admin endpoints for office management
-async function getAllOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, headers: corsHeaders, body: 'Unauthorized' };
-  }
-
-  try {
-    const result = await pool.query(`
-      SELECT id, name, location, capacity, timezone, is_active
-      FROM offices
-      ORDER BY name
-    `);
-
-    return { status: 200, headers: corsHeaders, jsonBody: result.rows };
-  } catch (error) {
-    context.error('Failed to get all offices:', error);
-    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
-  }
-}
-
-async function updateOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, headers: corsHeaders, body: 'Unauthorized' };
-  }
-
-  try {
-    const officeId = request.params.officeId;
-    const body = await request.json() as { name?: string; location?: string; capacity?: number; timezone?: string; is_active?: boolean };
-    
-    const updates: string[] = [];
-    const values: (string | number | boolean)[] = [];
-    let paramIndex = 1;
-
-    if (body.name !== undefined) {
-      updates.push(`name = $${paramIndex++}`);
-      values.push(body.name);
-    }
-    if (body.location !== undefined) {
-      updates.push(`location = $${paramIndex++}`);
-      values.push(body.location);
-    }
-    if (body.capacity !== undefined) {
-      updates.push(`capacity = $${paramIndex++}`);
-      values.push(body.capacity);
-    }
-    if (body.timezone !== undefined) {
-      updates.push(`timezone = $${paramIndex++}`);
-      values.push(body.timezone);
-    }
-    if (body.is_active !== undefined) {
-      updates.push(`is_active = $${paramIndex++}`);
-      values.push(body.is_active);
-    }
-
-    if (updates.length === 0) {
-      return { status: 400, headers: corsHeaders, jsonBody: { error: 'No fields to update' } };
-    }
-
-    values.push(officeId);
-    await pool.query(`UPDATE offices SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
-    
-    return { status: 200, headers: corsHeaders, jsonBody: { message: 'Office updated' } };
-  } catch (error) {
-    context.error('Failed to update office:', error);
-    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
-  }
-}
-
-async function createOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  const authHeader = request.headers.get('x-init-key');
-  if (authHeader !== process.env.INIT_SECRET_KEY) {
-    return { status: 401, headers: corsHeaders, body: 'Unauthorized' };
-  }
-
-  try {
-    const body = await request.json() as { name: string; location: string; capacity?: number; timezone?: string };
-    
-    if (!body.name || !body.location) {
-      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Name and location required' } };
-    }
-
-    const result = await pool.query(`
-      INSERT INTO offices (name, location, capacity, timezone, is_active)
-      VALUES ($1, $2, $3, $4, true)
-      RETURNING id
-    `, [body.name, body.location, body.capacity || 50, body.timezone || 'America/Chicago']);
-    
-    return { status: 201, headers: corsHeaders, jsonBody: { id: result.rows[0].id, message: 'Office created' } };
-  } catch (error) {
-    context.error('Failed to create office:', error);
-    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
-  }
-}
-
-app.http('getAllOffices', {
-  methods: ['GET'],
-  authLevel: 'anonymous',
-  route: 'admin/offices',
-  handler: getAllOffices,
-});
-
-app.http('updateOffice', {
-  methods: ['PUT'],
-  authLevel: 'anonymous',
-  route: 'admin/office/{officeId}',
-  handler: updateOffice,
-});
-
-app.http('createOffice', {
-  methods: ['POST'],
-  authLevel: 'anonymous',
-  route: 'admin/offices',
-  handler: createOffice,
 });

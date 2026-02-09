@@ -32,7 +32,7 @@ export function Settings() {
   const fetchOffices = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/offices`);
+      const response = await fetch(`${API_BASE_URL}/manage/offices`);
       if (response.ok) {
         const data = await response.json();
         setOffices(data);
@@ -61,13 +61,41 @@ export function Settings() {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
-    showMessage('success', 'Office updated (admin API requires authentication)');
+    try {
+      const response = await fetch(`${API_BASE_URL}/manage/office/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      if (response.ok) {
+        showMessage('success', 'Office updated successfully');
+        await fetchOffices();
+      } else {
+        showMessage('error', 'Failed to update office');
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to update office');
+    }
     setEditingId(null);
     setEditForm({});
   };
 
   const handleToggleActive = async (office: Office) => {
-    showMessage('success', `Office ${office.is_active ? 'deactivated' : 'activated'} (admin API requires authentication)`);
+    try {
+      const response = await fetch(`${API_BASE_URL}/manage/office/${office.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !office.is_active }),
+      });
+      if (response.ok) {
+        showMessage('success', `Office ${office.is_active ? 'deactivated' : 'activated'} successfully`);
+        await fetchOffices();
+      } else {
+        showMessage('error', 'Failed to update office status');
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to update office status');
+    }
   };
 
   const handleAddOffice = async () => {
@@ -75,7 +103,21 @@ export function Settings() {
       showMessage('error', 'Name and location are required');
       return;
     }
-    showMessage('success', 'Office added (admin API requires authentication)');
+    try {
+      const response = await fetch(`${API_BASE_URL}/manage/offices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOffice),
+      });
+      if (response.ok) {
+        showMessage('success', 'Office added successfully');
+        await fetchOffices();
+      } else {
+        showMessage('error', 'Failed to add office');
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to add office');
+    }
     setShowAddForm(false);
     setNewOffice({ name: '', location: '', capacity: 50, timezone: 'America/Chicago' });
   };

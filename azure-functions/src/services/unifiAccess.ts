@@ -8,6 +8,7 @@ const httpsAgent = new https.Agent({
 
 // Support multiple UniFi Access controllers
 // Minneapolis: access.msp.improving.com:12445
+// Dallas: access.dal.improving.com:12445
 export interface UnifiController {
   name: string;
   url: string;
@@ -32,6 +33,15 @@ function getControllers(): UnifiController[] {
       name: 'minneapolis',
       url: process.env.UNIFI_MSP_URL,
       token: process.env.UNIFI_MSP_TOKEN,
+    });
+  }
+  
+  // Dallas controller
+  if (process.env.UNIFI_DAL_URL && process.env.UNIFI_DAL_TOKEN) {
+    controllers.push({
+      name: 'dallas',
+      url: process.env.UNIFI_DAL_URL,
+      token: process.env.UNIFI_DAL_TOKEN,
     });
   }
   
