@@ -95,6 +95,33 @@ async function createOffice(request: HttpRequest, context: InvocationContext): P
   }
 }
 
+async function deleteOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  if (request.method === 'OPTIONS') {
+    return { status: 204, headers: corsHeaders };
+  }
+  try {
+    const officeId = request.params.officeId;
+    if (!officeId) {
+      return { status: 400, headers: corsHeaders, jsonBody: { error: 'Office ID required' } };
+    }
+
+    await pool.query('DELETE FROM access_events WHERE office_id = $1', [officeId]);
+    await pool.query('DELETE FROM presence_sessions WHERE office_id = $1', [officeId]);
+    await pool.query('DELETE FROM offices WHERE id = $1', [officeId]);
+    return { status: 200, headers: corsHeaders, jsonBody: { message: 'Office deleted' } };
+  } catch (error) {
+    context.error('Failed to delete office:', error);
+    return { status: 500, headers: corsHeaders, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('adminDeleteOffice', {
+  methods: ['DELETE', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'manage/office/{officeId}',
+  handler: deleteOffice,
+});
+
 app.http('adminGetAllOffices', {
   methods: ['GET'],
   authLevel: 'anonymous',

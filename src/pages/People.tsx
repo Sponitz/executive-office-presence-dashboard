@@ -12,6 +12,7 @@ interface User {
   display_name: string;
   department: string | null;
   job_title: string | null;
+  company_name: string | null;
   created_at: string;
 }
 
@@ -155,6 +156,9 @@ export function People() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
                       Job Title
                     </th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      Company
+                    </th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -193,6 +197,9 @@ export function People() {
                           <Briefcase className="h-4 w-4 text-slate-400" />
                           {user.job_title || '-'}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {user.company_name || '-'}
                       </td>
                       <td className="px-6 py-4">
                         <ChevronRight className="h-5 w-5 text-slate-400" />

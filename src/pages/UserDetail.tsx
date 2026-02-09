@@ -12,9 +12,11 @@ interface UserProfile {
   display_name: string;
   department: string | null;
   job_title: string | null;
+  company_name: string | null;
   office_location: string | null;
   manager_name: string | null;
   manager_email: string | null;
+  manager_id: string | null;
   employee_type: string | null;
   account_enabled: boolean;
   created_at: string;
@@ -182,11 +184,15 @@ export function UserDetail() {
                   <Users className="w-5 h-5 text-slate-400" />
                   <div>
                     <p className="text-xs text-slate-400">Reports to</p>
-                    <p>{user.manager_name}</p>
-                    {user.manager_email && (
-                      <a href={`mailto:${user.manager_email}`} className="text-sm text-blue-600 hover:underline">
-                        {user.manager_email}
-                      </a>
+                    {user.manager_id ? (
+                      <button
+                        onClick={() => navigate(`/people/${user.manager_id}`)}
+                        className="text-blue-600 hover:underline font-medium"
+                      >
+                        {user.manager_name}
+                      </button>
+                    ) : (
+                      <p>{user.manager_name}</p>
                     )}
                   </div>
                 </div>

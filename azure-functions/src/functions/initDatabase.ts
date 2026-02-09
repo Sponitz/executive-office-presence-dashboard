@@ -53,6 +53,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'account_enabled') THEN
         ALTER TABLE users ADD COLUMN account_enabled BOOLEAN DEFAULT true;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'company_name') THEN
+        ALTER TABLE users ADD COLUMN company_name VARCHAR(255);
+    END IF;
 END $$;
 
 -- Access events table

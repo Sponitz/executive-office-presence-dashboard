@@ -88,10 +88,10 @@ async function getAttendance(request: HttpRequest, context: InvocationContext): 
         DATE(ae.timestamp)::text as date,
         ae.office_id as "officeId",
         o.name as office_name,
-        COUNT(DISTINCT ae.user_id) as "uniqueVisitors",
-        COUNT(*) as "totalEntries",
+        COUNT(DISTINCT ae.user_id)::int as "uniqueVisitors",
+        COUNT(DISTINCT ae.user_id)::int as "totalEntries",
         0 as "averageDurationMinutes",
-        COUNT(DISTINCT ae.user_id) as "peakOccupancy"
+        COUNT(DISTINCT ae.user_id)::int as "peakOccupancy"
       FROM access_events ae
       JOIN offices o ON ae.office_id = o.id
       WHERE DATE(ae.timestamp) >= $1::date AND DATE(ae.timestamp) <= $2::date
@@ -123,7 +123,7 @@ async function getHourlyOccupancy(request: HttpRequest, context: InvocationConte
       SELECT 
         EXTRACT(HOUR FROM timestamp) as hour,
         EXTRACT(DOW FROM timestamp) as day_of_week,
-        COUNT(DISTINCT user_id) as average_occupancy,
+        COUNT(DISTINCT user_id)::int as average_occupancy,
         office_id
       FROM access_events
       WHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'
@@ -204,7 +204,7 @@ async function getUsers(request: HttpRequest, context: InvocationContext): Promi
     const search = request.query.get('search');
 
     let query = `
-      SELECT id, entra_id, email, display_name, department, job_title, created_at
+      SELECT id, entra_id, email, display_name, department, job_title, company_name, created_at
       FROM users
     `;
     const params: (string | number)[] = [];
@@ -290,10 +290,13 @@ async function getUserById(request: HttpRequest, context: InvocationContext): Pr
 
     // Include all extended profile columns
     const result = await pool.query(`
-      SELECT id, entra_id, email, display_name, department, job_title, 
-             office_location, manager_name, manager_email, employee_type, 
-             account_enabled, created_at
-      FROM users WHERE id = $1
+      SELECT u.id, u.entra_id, u.email, u.display_name, u.department, u.job_title, 
+             u.company_name, u.office_location, u.manager_name, u.manager_email, 
+             u.employee_type, u.account_enabled, u.created_at,
+             mgr.id as manager_id
+      FROM users u
+      LEFT JOIN users mgr ON u.manager_email = mgr.email
+      WHERE u.id = $1
     `, [userId]);
 
     if (result.rows.length === 0) {
@@ -412,10 +415,10 @@ async function getOfficeDailyStats(request: HttpRequest, context: InvocationCont
     const result = await pool.query(`
       SELECT 
         DATE(timestamp)::text as date,
-        COUNT(DISTINCT user_id) as unique_visitors,
-        COUNT(*) as total_entries,
+        COUNT(DISTINCT user_id)::int as unique_visitors,
+        COUNT(DISTINCT user_id)::int as total_entries,
         0 as avg_duration_minutes,
-        COUNT(DISTINCT user_id) as peak_occupancy
+        COUNT(DISTINCT user_id)::int as peak_occupancy
       FROM access_events
       WHERE office_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '1 day' * $2
       GROUP BY DATE(timestamp)
@@ -436,7 +439,7 @@ async function getOfficeHourlyStats(request: HttpRequest, context: InvocationCon
     const result = await pool.query(`
       SELECT 
         EXTRACT(HOUR FROM timestamp)::int as hour,
-        COUNT(DISTINCT user_id) as avg_occupancy
+        COUNT(DISTINCT user_id)::int as avg_occupancy
       FROM access_events
       WHERE office_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY EXTRACT(HOUR FROM timestamp)
@@ -457,7 +460,7 @@ async function getOfficeTopVisitors(request: HttpRequest, context: InvocationCon
 
     const result = await pool.query(`
       SELECT u.id as user_id, u.display_name, u.email,
-             COUNT(DISTINCT DATE(ae.timestamp)) as visit_count,
+             COUNT(DISTINCT DATE(ae.timestamp))::int as visit_count,
              0 as total_hours
       FROM access_events ae
       JOIN users u ON ae.user_id = u.id
@@ -577,7 +580,7 @@ async function getWeeklyTrends(request: HttpRequest, context: InvocationContext)
     const result = await pool.query(`
       SELECT 
         DATE(timestamp) as date,
-        COUNT(DISTINCT user_id) as unique_visitors
+        COUNT(DISTINCT user_id)::int as unique_visitors
       FROM access_events
       WHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE(timestamp)

@@ -96,13 +96,13 @@ export function OfficeDetail() {
 
   const summaryStats = useMemo(() => {
     if (dailyStats.length === 0) return null;
-    const totalVisitors = dailyStats.reduce((sum, d) => sum + d.unique_visitors, 0);
-    const avgDaily = Math.round(totalVisitors / dailyStats.length);
+    const totalVisitorDays = dailyStats.reduce((sum, d) => sum + Number(d.unique_visitors), 0);
+    const avgDaily = Math.round(totalVisitorDays / dailyStats.length);
     const avgDuration = Math.round(
-      dailyStats.reduce((sum, d) => sum + d.avg_duration_minutes, 0) / dailyStats.length
+      dailyStats.reduce((sum, d) => sum + Number(d.avg_duration_minutes), 0) / dailyStats.length
     );
-    const peakOccupancy = Math.max(...dailyStats.map(d => d.peak_occupancy));
-    return { totalVisitors, avgDaily, avgDuration, peakOccupancy };
+    const peakOccupancy = Math.max(...dailyStats.map(d => Number(d.peak_occupancy)));
+    return { totalVisitors: totalVisitorDays, avgDaily, avgDuration, peakOccupancy };
   }, [dailyStats]);
 
   const formatDuration = (minutes: number) => {

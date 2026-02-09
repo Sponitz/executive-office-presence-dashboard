@@ -98,6 +98,25 @@ export function Settings() {
     }
   };
 
+  const handleDeleteOffice = async (office: Office) => {
+    if (!confirm(`Are you sure you want to permanently delete "${office.name}"? This will also delete all associated access events and sessions.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/manage/office/${office.id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        showMessage('success', `Office "${office.name}" deleted permanently`);
+        await fetchOffices();
+      } else {
+        showMessage('error', 'Failed to delete office');
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to delete office');
+    }
+  };
+
   const handleAddOffice = async () => {
     if (!newOffice.name || !newOffice.location) {
       showMessage('error', 'Name and location are required');
@@ -356,8 +375,15 @@ export function Settings() {
                             </button>
                             <button
                               onClick={() => handleToggleActive(office)}
-                              className={`p-1 rounded ${office.is_active !== false ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
+                              className={`p-1 rounded ${office.is_active !== false ? 'text-slate-400 hover:text-orange-600 hover:bg-orange-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
                               title={office.is_active !== false ? 'Deactivate' : 'Activate'}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOffice(office)}
+                              className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50"
+                              title="Delete permanently"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

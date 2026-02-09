@@ -128,13 +128,14 @@ async function syncUsersFromGraph(context: InvocationContext): Promise<{ synced:
       
       try {
         await pool.query(
-          `INSERT INTO users (entra_id, email, display_name, department, job_title, office_location, manager_name, manager_email, employee_type, account_enabled)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO users (entra_id, email, display_name, department, job_title, company_name, office_location, manager_name, manager_email, employee_type, account_enabled)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (entra_id) DO UPDATE SET
              email = EXCLUDED.email,
              display_name = EXCLUDED.display_name,
              department = EXCLUDED.department,
              job_title = EXCLUDED.job_title,
+             company_name = EXCLUDED.company_name,
              office_location = EXCLUDED.office_location,
              manager_name = EXCLUDED.manager_name,
              manager_email = EXCLUDED.manager_email,
@@ -147,6 +148,7 @@ async function syncUsersFromGraph(context: InvocationContext): Promise<{ synced:
             user.displayName,
             user.department || null,
             user.jobTitle || null,
+            user.companyName || null,
             user.officeLocation || null,
             manager?.displayName || null,
             manager?.mail || null,
