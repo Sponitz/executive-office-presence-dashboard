@@ -1,21 +1,44 @@
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MapPin, Users, Clock, TrendingUp } from 'lucide-react';
-import { mockOffices, generateDailyAttendance, getOfficeComparisonData } from '@/utils/mockData';
+import { getOffices, getAttendance } from '@/services/api';
+import type { Office, DailyAttendance } from '@/services/api';
 
 export function Offices() {
-  const dailyAttendance = useMemo(() => generateDailyAttendance(30), []);
-  const officeComparison = useMemo(() => getOfficeComparisonData(), []);
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [attendance, setAttendance] = useState<DailyAttendance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [officesData, attendanceData] = await Promise.all([
+          getOffices(),
+          getAttendance(),
+        ]);
+        setOffices(officesData);
+        setAttendance(attendanceData);
+      } catch (error) {
+        console.error('Failed to load offices data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
 
   const officeStats = useMemo(() => {
-    return mockOffices.map((office) => {
-      const officeData = dailyAttendance.filter((d) => d.officeId === office.id);
-      const totalVisitors = officeData.reduce((sum, d) => sum + d.uniqueVisitors, 0);
-      const avgDaily = Math.round(totalVisitors / 30);
-      const avgDuration = Math.round(
-        officeData.reduce((sum, d) => sum + d.averageDurationMinutes, 0) / officeData.length
-      );
-      const peakOccupancy = Math.max(...officeData.map((d) => d.peakOccupancy));
-      const comparison = officeComparison.find((c) => c.name === office.name);
+    return offices.map((office) => {
+      const officeData = attendance.filter((d) => d.office_id === office.id);
+      const totalVisitors = officeData.reduce((sum, d) => sum + (d.unique_visitors || 0), 0);
+      const days = officeData.length || 1;
+      const avgDaily = Math.round(totalVisitors / days);
+      const avgDuration = officeData.length > 0
+        ? Math.round(officeData.reduce((sum, d) => sum + (d.average_duration_minutes || 0), 0) / officeData.length)
+        : 0;
+      const peakOccupancy = officeData.length > 0
+        ? Math.max(...officeData.map((d) => d.peak_occupancy || 0))
+        : 0;
 
       return {
         ...office,
@@ -23,11 +46,11 @@ export function Offices() {
         avgDaily,
         avgDuration,
         peakOccupancy,
-        currentOccupancy: comparison?.current || 0,
-        occupancyRate: comparison?.occupancyRate || 0,
+        currentOccupancy: office.current_occupancy || 0,
+        occupancyRate: office.occupancy_rate || 0,
       };
     });
-  }, [dailyAttendance, officeComparison]);
+  }, [offices, attendance]);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -35,9 +58,19 @@ export function Offices() {
     return `${hours}h ${mins}m`;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-slate-500">Loading offices...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Offices</h1>
         <p className="text-slate-500 mt-1">Overview of all office locations and their metrics</p>

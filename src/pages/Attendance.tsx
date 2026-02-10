@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { subDays, format, parseISO } from 'date-fns';
 import {
   AreaChart,
@@ -11,62 +11,93 @@ import {
   Legend,
 } from 'recharts';
 import { OfficeSelector, DateRangePicker } from '@/components';
-import { mockOffices, generateDailyAttendance } from '@/utils/mockData';
+import { getOffices, getAttendance } from '@/services/api';
+import type { Office, DailyAttendance as DailyAttendanceType } from '@/services/api';
 
 export function Attendance() {
-  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>(
-    mockOffices.map((o) => o.id)
-  );
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [attendance, setAttendance] = useState<DailyAttendanceType[]>([]);
+  const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState({
     start: subDays(new Date(), 29),
     end: new Date(),
   });
+  const [loading, setLoading] = useState(true);
 
-  const dailyAttendance = useMemo(() => generateDailyAttendance(30), []);
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [officesData, attendanceData] = await Promise.all([
+          getOffices(),
+          getAttendance(),
+        ]);
+        setOffices(officesData);
+        setAttendance(attendanceData);
+        setSelectedOfficeIds(officesData.map((o) => o.id));
+      } catch (error) {
+        console.error('Failed to load attendance data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
 
   const chartData = useMemo(() => {
     const dateMap: Record<string, { date: string; total: number; [key: string]: string | number }> = {};
 
-    for (const record of dailyAttendance) {
-      if (!selectedOfficeIds.includes(record.officeId)) continue;
+    for (const record of attendance) {
+      if (!selectedOfficeIds.includes(record.office_id)) continue;
 
       const dateStr = record.date;
       if (!dateMap[dateStr]) {
         dateMap[dateStr] = { date: dateStr, total: 0 };
       }
 
-      const office = mockOffices.find((o) => o.id === record.officeId);
+      const office = offices.find((o) => o.id === record.office_id);
       if (office) {
-        dateMap[dateStr][office.name] = record.uniqueVisitors;
-        dateMap[dateStr].total += record.uniqueVisitors;
+        dateMap[dateStr][office.name] = record.unique_visitors;
+        dateMap[dateStr].total += record.unique_visitors;
       }
     }
 
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
-  }, [dailyAttendance, selectedOfficeIds]);
+  }, [attendance, offices, selectedOfficeIds]);
 
   const colors = ['#005596', '#5BC2A7', '#F5BB41', '#9D1D96', '#4597D3', '#A7A8A9'];
 
-  const selectedOffices = mockOffices.filter((o) => selectedOfficeIds.includes(o.id));
+  const selectedOffices = offices.filter((o) => selectedOfficeIds.includes(o.id));
 
   const summaryStats = useMemo(() => {
-    const filtered = dailyAttendance.filter((d) => selectedOfficeIds.includes(d.officeId));
-    const totalVisitors = filtered.reduce((sum, d) => sum + d.uniqueVisitors, 0);
-    const avgDaily = Math.round(totalVisitors / 30);
+    const filtered = attendance.filter((d) => selectedOfficeIds.includes(d.office_id));
+    const totalVisitors = filtered.reduce((sum, d) => sum + (d.unique_visitors || 0), 0);
+    const days = new Set(filtered.map((d) => d.date)).size || 1;
+    const avgDaily = Math.round(totalVisitors / days);
     const peakDay = filtered.reduce(
-      (max, d) => (d.uniqueVisitors > max.visitors ? { date: d.date, visitors: d.uniqueVisitors } : max),
+      (max, d) => ((d.unique_visitors || 0) > max.visitors ? { date: d.date, visitors: d.unique_visitors || 0 } : max),
       { date: '', visitors: 0 }
     );
-    const avgDuration = Math.round(
-      filtered.reduce((sum, d) => sum + d.averageDurationMinutes, 0) / filtered.length
-    );
+    const avgDuration = filtered.length > 0
+      ? Math.round(filtered.reduce((sum, d) => sum + (d.average_duration_minutes || 0), 0) / filtered.length)
+      : 0;
 
     return { totalVisitors, avgDaily, peakDay, avgDuration };
-  }, [dailyAttendance, selectedOfficeIds]);
+  }, [attendance, selectedOfficeIds]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-slate-500">Loading attendance data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Attendance Trends</h1>
@@ -74,7 +105,7 @@ export function Attendance() {
         </div>
         <div className="flex flex-wrap gap-3">
           <OfficeSelector
-            offices={mockOffices}
+            offices={offices}
             selectedOfficeIds={selectedOfficeIds}
             onChange={setSelectedOfficeIds}
           />
@@ -86,7 +117,6 @@ export function Attendance() {
         </div>
       </div>
 
-      {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <p className="text-sm font-medium text-slate-500">Total Visitors (30d)</p>
@@ -111,7 +141,6 @@ export function Attendance() {
         </div>
       </div>
 
-      {/* Main Chart */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4">Daily Attendance by Office</h3>
         <div className="h-96">
@@ -151,7 +180,6 @@ export function Attendance() {
         </div>
       </div>
 
-      {/* Office Breakdown Table */}
       <div className="bg-white rounded-xl border border-slate-200">
         <div className="p-6 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-900">Office Breakdown</h3>
@@ -179,9 +207,10 @@ export function Attendance() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {selectedOffices.map((office) => {
-                const officeData = dailyAttendance.filter((d) => d.officeId === office.id);
-                const totalVisitors = officeData.reduce((sum, d) => sum + d.uniqueVisitors, 0);
-                const dailyAvg = Math.round(totalVisitors / 30);
+                const officeData = attendance.filter((d) => d.office_id === office.id);
+                const totalVisitors = officeData.reduce((sum, d) => sum + (d.unique_visitors || 0), 0);
+                const days = new Set(officeData.map((d) => d.date)).size || 1;
+                const dailyAvg = Math.round(totalVisitors / days);
                 const utilization = Math.round((dailyAvg / office.capacity) * 100);
 
                 return (
