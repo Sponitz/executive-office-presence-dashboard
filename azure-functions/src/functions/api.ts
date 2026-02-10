@@ -137,9 +137,22 @@ async function getHourlyOccupancy(request: HttpRequest, context: InvocationConte
 async function getOffices(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const result = await pool.query(`
-      SELECT o.*, co.current_occupancy, co.occupancy_rate
+      SELECT o.*,
+        COALESCE((
+          SELECT COUNT(DISTINCT ae.user_id)
+          FROM access_events ae
+          WHERE ae.office_id = o.id
+            AND ae.timestamp >= NOW() - INTERVAL '8 hours'
+        ), 0)::int as current_occupancy,
+        CASE WHEN o.capacity > 0 THEN
+          ROUND(COALESCE((
+            SELECT COUNT(DISTINCT ae.user_id)
+            FROM access_events ae
+            WHERE ae.office_id = o.id
+              AND ae.timestamp >= NOW() - INTERVAL '8 hours'
+          ), 0)::numeric / o.capacity * 100, 1)
+        ELSE 0 END as occupancy_rate
       FROM offices o
-      LEFT JOIN current_occupancy co ON o.id = co.office_id
       WHERE o.is_active = true
       ORDER BY o.name
     `);
@@ -154,7 +167,28 @@ async function getOffices(request: HttpRequest, context: InvocationContext): Pro
 async function getUserPresence(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const result = await pool.query(`
-      SELECT * FROM user_presence_summary
+      SELECT
+        u.id as user_id,
+        u.display_name,
+        u.email,
+        COUNT(DISTINCT DATE(ae.timestamp))::int as total_visits,
+        COUNT(*)::int as total_minutes,
+        CASE WHEN COUNT(DISTINCT DATE(ae.timestamp)) > 0
+          THEN (COUNT(*)::numeric / COUNT(DISTINCT DATE(ae.timestamp)))::int
+          ELSE 0 END as average_minutes_per_visit,
+        MAX(ae.timestamp) as last_visit,
+        (
+          SELECT o2.name FROM offices o2
+          JOIN access_events ae2 ON ae2.office_id = o2.id
+          WHERE ae2.user_id = u.id
+          GROUP BY o2.name
+          ORDER BY COUNT(*) DESC
+          LIMIT 1
+        ) as primary_office
+      FROM users u
+      JOIN access_events ae ON ae.user_id = u.id
+      WHERE ae.timestamp >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY u.id, u.display_name, u.email
       ORDER BY total_visits DESC
       LIMIT 100
     `);
