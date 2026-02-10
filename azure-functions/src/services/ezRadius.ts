@@ -60,11 +60,11 @@ export function getOfficeSearchTermsForIp(ip: string): string[] | null {
 
 async function getEzRadiusToken(): Promise<string> {
   const tenantId = process.env.EZRADIUS_TENANT_ID || process.env.AZURE_TENANT_ID;
-  const clientId = process.env.EZRADIUS_CLIENT_ID;
-  const clientSecret = process.env.EZRADIUS_CLIENT_SECRET;
+  const clientId = process.env.EZRADIUS_CLIENT_ID || process.env.AZURE_CLIENT_ID;
+  const clientSecret = process.env.EZRADIUS_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET;
 
   if (!tenantId || !clientId || !clientSecret) {
-    throw new Error('EZRadius service principal credentials not configured (EZRADIUS_TENANT_ID, EZRADIUS_CLIENT_ID, EZRADIUS_CLIENT_SECRET)');
+    throw new Error('Service principal credentials not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET (or EZRADIUS_* equivalents)');
   }
 
   const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
