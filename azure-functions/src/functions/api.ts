@@ -248,3 +248,209 @@ app.http('getUsers', {
   route: 'users',
   handler: getUsers,
 });
+
+async function getUserById(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+    const result = await pool.query(
+      'SELECT id, entra_id, email, display_name, department, job_title, created_at FROM users WHERE id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return { status: 404, jsonBody: { error: 'User not found' } };
+    }
+    return { status: 200, jsonBody: result.rows[0] };
+  } catch (error) {
+    context.error('Failed to get user:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getUserSessions(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+    const result = await pool.query(`
+      SELECT ae.*, o.name as office_name
+      FROM access_events ae
+      LEFT JOIN offices o ON ae.office_id = o.id
+      WHERE ae.user_id = $1
+      ORDER BY ae.timestamp DESC
+      LIMIT 100
+    `, [userId]);
+    return { status: 200, jsonBody: { sessions: result.rows } };
+  } catch (error) {
+    context.error('Failed to get user sessions:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getUserStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const userId = request.params.userId;
+    const result = await pool.query(`
+      SELECT
+        COUNT(DISTINCT DATE(timestamp))::int as total_visits,
+        COUNT(*)::int as total_events,
+        MIN(timestamp) as first_visit,
+        MAX(timestamp) as last_visit
+      FROM access_events
+      WHERE user_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '30 days'
+    `, [userId]);
+    return { status: 200, jsonBody: result.rows[0] };
+  } catch (error) {
+    context.error('Failed to get user stats:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeById(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    const result = await pool.query(`
+      SELECT o.*, co.current_occupancy, co.occupancy_rate
+      FROM offices o
+      LEFT JOIN current_occupancy co ON o.id = co.office_id
+      WHERE o.id = $1
+    `, [officeId]);
+    if (result.rows.length === 0) {
+      return { status: 404, jsonBody: { error: 'Office not found' } };
+    }
+    return { status: 200, jsonBody: result.rows[0] };
+  } catch (error) {
+    context.error('Failed to get office:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeDailyStats(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    const days = parseInt(request.query.get('days') || '30');
+    const result = await pool.query(`
+      SELECT
+        DATE(timestamp)::text as date,
+        COUNT(DISTINCT user_id)::int as unique_visitors,
+        COUNT(*)::int as total_entries,
+        0 as avg_duration_minutes,
+        COUNT(DISTINCT user_id)::int as peak_occupancy
+      FROM access_events
+      WHERE office_id = $1 AND timestamp >= CURRENT_DATE - INTERVAL '1 day' * $2
+      GROUP BY DATE(timestamp)
+      ORDER BY date DESC
+    `, [officeId, days]);
+    return { status: 200, jsonBody: { stats: result.rows } };
+  } catch (error) {
+    context.error('Failed to get office daily stats:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getOfficeTopVisitors(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    const limit = parseInt(request.query.get('limit') || '10');
+    const result = await pool.query(`
+      SELECT u.id as user_id, u.display_name, u.email,
+             COUNT(DISTINCT DATE(ae.timestamp))::int as visit_count,
+             0 as total_hours
+      FROM access_events ae
+      JOIN users u ON ae.user_id = u.id
+      WHERE ae.office_id = $1 AND ae.timestamp >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY u.id, u.display_name, u.email
+      ORDER BY visit_count DESC
+      LIMIT $2
+    `, [officeId, limit]);
+    return { status: 200, jsonBody: { visitors: result.rows } };
+  } catch (error) {
+    context.error('Failed to get office top visitors:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function getWeeklyTrends(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const result = await pool.query(`
+      SELECT
+        DATE(timestamp)::text as date,
+        COUNT(DISTINCT user_id)::int as unique_visitors
+      FROM access_events
+      WHERE timestamp >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(timestamp)
+      ORDER BY date
+    `);
+    return { status: 200, jsonBody: result.rows };
+  } catch (error) {
+    context.error('Failed to get weekly trends:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+async function deactivateOffice(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const officeId = request.params.officeId;
+    if (!officeId) {
+      return { status: 400, jsonBody: { error: 'Office ID required' } };
+    }
+    await pool.query('UPDATE offices SET is_active = false WHERE id = $1', [officeId]);
+    return { status: 200, jsonBody: { message: 'Office deactivated' } };
+  } catch (error) {
+    context.error('Failed to deactivate office:', error);
+    return { status: 500, jsonBody: { error: 'Internal server error' } };
+  }
+}
+
+app.http('getUserById', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}',
+  handler: getUserById,
+});
+
+app.http('getUserSessions', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}/sessions',
+  handler: getUserSessions,
+});
+
+app.http('getUserStats', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'user/{userId}/stats',
+  handler: getUserStats,
+});
+
+app.http('getOfficeById', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}',
+  handler: getOfficeById,
+});
+
+app.http('getOfficeDailyStats', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/daily',
+  handler: getOfficeDailyStats,
+});
+
+app.http('getOfficeTopVisitors', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}/top-visitors',
+  handler: getOfficeTopVisitors,
+});
+
+app.http('getWeeklyTrends', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'weekly-trends',
+  handler: getWeeklyTrends,
+});
+
+app.http('deactivateOffice', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'office/{officeId}',
+  handler: deactivateOffice,
+});

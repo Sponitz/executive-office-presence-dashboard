@@ -9,6 +9,8 @@ export interface Office {
   address?: string;
   phone?: string;
   country?: string;
+  current_occupancy?: number;
+  occupancy_rate?: number;
 }
 
 export interface DashboardStats {
@@ -30,18 +32,35 @@ export interface User {
 
 export interface DailyAttendance {
   date: string;
-  officeId: string;
-  uniqueVisitors: number;
-  totalEntries: number;
-  averageDurationMinutes: number;
-  peakOccupancy: number;
+  office_id: string;
+  office_name: string;
+  unique_visitors: number;
+  total_entries: number;
+  average_duration_minutes: number;
+  peak_occupancy: number;
 }
 
 export interface HourlyOccupancy {
   hour: number;
-  dayOfWeek: number;
-  averageOccupancy: number;
-  officeId: string;
+  day_of_week: number;
+  average_occupancy: number;
+  office_id: string;
+}
+
+export interface UserPresenceSummary {
+  user_id: string;
+  display_name: string;
+  email: string;
+  total_visits: number;
+  total_minutes: number;
+  average_minutes_per_visit: number;
+  last_visit: string | null;
+  primary_office: string | null;
+}
+
+export interface WeeklyTrendData {
+  date: string;
+  unique_visitors: number;
 }
 
 async function fetchApi<T>(endpoint: string): Promise<T> {
@@ -54,8 +73,7 @@ async function fetchApi<T>(endpoint: string): Promise<T> {
 
 export async function getOffices(): Promise<Office[]> {
   try {
-    const data = await fetchApi<{ offices: Office[] }>('/offices');
-    return data.offices || [];
+    return await fetchApi<Office[]>('/offices');
   } catch (error) {
     console.error('Failed to fetch offices:', error);
     return [];
@@ -84,8 +102,7 @@ export async function getAttendance(startDate?: string, endDate?: string): Promi
     if (startDate && endDate) {
       url += `?startDate=${startDate}&endDate=${endDate}`;
     }
-    const data = await fetchApi<{ attendance: DailyAttendance[] }>(url);
-    return data.attendance || [];
+    return await fetchApi<DailyAttendance[]>(url);
   } catch (error) {
     console.error('Failed to fetch attendance:', error);
     return [];
@@ -94,8 +111,7 @@ export async function getAttendance(startDate?: string, endDate?: string): Promi
 
 export async function getHourlyOccupancy(): Promise<HourlyOccupancy[]> {
   try {
-    const data = await fetchApi<{ occupancy: HourlyOccupancy[] }>('/hourly-occupancy');
-    return data.occupancy || [];
+    return await fetchApi<HourlyOccupancy[]>('/hourly-occupancy');
   } catch (error) {
     console.error('Failed to fetch hourly occupancy:', error);
     return [];
@@ -104,10 +120,28 @@ export async function getHourlyOccupancy(): Promise<HourlyOccupancy[]> {
 
 export async function getUsers(): Promise<User[]> {
   try {
-    const data = await fetchApi<{ users: User[] }>('/users');
+    const data = await fetchApi<{ users: User[]; total: number }>('/users');
     return data.users || [];
   } catch (error) {
     console.error('Failed to fetch users:', error);
+    return [];
+  }
+}
+
+export async function getUserPresence(): Promise<UserPresenceSummary[]> {
+  try {
+    return await fetchApi<UserPresenceSummary[]>('/user-presence');
+  } catch (error) {
+    console.error('Failed to fetch user presence:', error);
+    return [];
+  }
+}
+
+export async function getWeeklyTrends(): Promise<WeeklyTrendData[]> {
+  try {
+    return await fetchApi<WeeklyTrendData[]>('/weekly-trends');
+  } catch (error) {
+    console.error('Failed to fetch weekly trends:', error);
     return [];
   }
 }
